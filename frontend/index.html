@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de Proyectos</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header id="barra" class="oculto">
+    <span class="marca">Gestión de Proyectos</span>
+    <nav>
+      <a href="#/proyectos">Mis proyectos</a>
+      <a href="#/usuarios" id="nav-usuarios" class="oculto">Usuarios</a>
+    </nav>
+    <div class="sesion">
+      <span id="usuario-actual"></span>
+      <button id="btn-salir" class="secundario">Salir</button>
+    </div>
+  </header>
+
+  <main id="app"></main>
+
+  <!-- HU-08-001: aviso común de guardado / error -->
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

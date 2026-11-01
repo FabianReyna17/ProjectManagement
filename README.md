@@ -5,6 +5,10 @@ MVP: un usuario entra, crea un proyecto, da acceso a otro y este solo ve lo auto
 - **Backend:** Python + FastAPI + SQLite
 - **Frontend:** HTML, CSS y JavaScript (sin frameworks), servido por el mismo backend
 
+## Arquitectura y evolución
+
+La [revisión de arquitectura](docs/Arquitectura_Gestion_Proyectos.md) documenta la base del Sprint 1 y una propuesta de monolito modular. Incluye los requisitos visibles de la entrega, hallazgos, diagramas y un orden de implementación. Los componentes futuros se presentan como propuestas.
+
 ## Estructura
 
 ```

@@ -1,0 +1,13 @@
+flowchart TB
+    persona["Responsable, integrante, administrador o supervisor"]
+    persona -->|"HTTPS"| entrada["Entrada HTTPS<br/>plataforma de alojamiento o proxy"]
+    entrada --> web["Interfaz modular<br/>HTML, CSS y JavaScript"]
+    entrada -->|"/api"| api["API FastAPI<br/>monolito modular"]
+    web -->|"JSON por el mismo origen HTTPS"| entrada
+    api --> datos[("Base de datos del cliente<br/>PostgreSQL propuesto para piloto")]
+    api -.->|"al incorporar adjuntos"| archivos["Almacenamiento privado<br/>archivos fuera del directorio público"]
+    proceso["Proceso programado<br/>al incorporar recordatorios"] -.-> datos
+    respaldo["Proceso de respaldo"] -->|"lee datos y archivos"| datos
+    respaldo --> archivos
+    respaldo --> copias["Copias protegidas<br/>fuera del servidor principal"]
+    api --> logs["Registros y métricas operativas"]

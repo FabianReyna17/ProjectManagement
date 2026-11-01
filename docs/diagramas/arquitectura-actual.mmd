@@ -1,0 +1,14 @@
+flowchart TB
+    persona["Persona en navegador"] --> interfaz["HTML, CSS y JavaScript<br/>app.js concentra rutas y vistas"]
+    subgraph aplicacion["Un proceso FastAPI"]
+        estaticos["StaticFiles sirve el frontend"]
+        rutas["Routers auth, usuarios y proyectos<br/>HTTP + reglas + SQL"]
+        permisos["deps.py<br/>sesión y permisos"]
+        inicio["database.py<br/>conexión, esquema y administrador inicial"]
+    end
+    estaticos --> interfaz
+    interfaz -->|"JSON /api"| rutas
+    rutas --> permisos
+    rutas -->|"sqlite3"| bd[("SQLite local")]
+    permisos --> bd
+    inicio --> bd

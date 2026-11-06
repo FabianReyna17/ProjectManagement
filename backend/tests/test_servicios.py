@@ -4,11 +4,13 @@ import pathlib
 from datetime import date
 
 import pytest
+from sqlalchemy import text
 
 from app.core.errors import Conflicto, DatosInvalidos, NoAutenticado, Prohibido
 from app.db.database import get_engine, init_db
 from app.modules.acceso import service as acceso
 from app.modules.proyectos import service as proyectos
+from app.modules.tareas import service as tareas
 
 APP = pathlib.Path(__file__).resolve().parents[1] / "app"
 
@@ -77,3 +79,16 @@ def test_participantes_reglas(db):
     proyectos.retirar_participante(db, p, ana, beto)
     with pytest.raises(Prohibido):
         proyectos.obtener_autorizado(db, pid, beto)
+
+
+def test_no_se_asigna_tarea_a_cuenta_inactiva(db):
+    ana = acceso.registrar_usuario(db, "ana", "Ana", "clave123", funcion(db, "Responsable"))["id"]
+    beto = acceso.registrar_usuario(db, "beto", "Beto", "clave123", funcion(db, "Integrante"))["id"]
+    p = proyectos.crear(db, ana, "Web", "Sitio", ana, date(2026, 11, 1), date(2026, 12, 1))
+    proyectos.agregar_participante(db, p, ana, beto)
+    t = tareas.obtener_autorizada(db, tareas.crear(db, p, ana, "T", "D", None)["id"], ana)
+    db.execute(text("UPDATE usuarios SET activo = 0 WHERE id = :id"), {"id": beto})
+    db.commit()
+    with pytest.raises(DatosInvalidos):
+        tareas.asignar(db, t, ana, beto)
+    assert tareas.obtener_autorizada(db, t["id"], ana)["responsable_id"] is None

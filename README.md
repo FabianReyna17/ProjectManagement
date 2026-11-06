@@ -83,6 +83,7 @@ Cada prueba usa su propia BD temporal.
 | HU | Implementación |
 |---|---|
 | HU-03-001 | `POST /api/proyectos/{id}/tareas` (solo responsable del proyecto), estado inicial "pendiente"; `GET /api/tareas/{id}`; formulario "Nueva tarea" y detalle |
+| HU-03-002 | `PUT /api/tareas/{id}/responsable` (solo responsable del proyecto) valida cuenta activa y participante; cada cambio queda en `historial_tareas` (anterior, nuevo, actor, fecha) — `GET /api/tareas/{id}/historial`; selector en la tarea y al crearla |
 
 ## Fuera de alcance (siguientes sprints)
 

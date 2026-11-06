@@ -40,6 +40,10 @@ def obtener_autorizado(db, proyecto_id: int, usuario_id: int) -> dict:
     return proyecto
 
 
+def es_participante(db, proyecto_id: int, usuario_id: int) -> bool:
+    return repo.es_participante(db, proyecto_id, usuario_id)
+
+
 def ficha(proyecto: dict, usuario_id: int) -> dict:
     return {**proyecto, "soy_responsable": proyecto["responsable_id"] == usuario_id}
 

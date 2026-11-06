@@ -1,21 +1,40 @@
-"""Reglas de tareas (HU-03-001).
+"""Reglas de tareas (HU-03-001, HU-03-002).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
+Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
 """
 from typing import Optional
 
-from ...core.errors import Prohibido
+from ...core.errors import DatosInvalidos, Prohibido
 from ...db.database import transaccion
+from ..acceso import service as acceso
 from ..proyectos import service as proyectos
 from . import repository as repo
 
+MSG_RESPONSABLE = "El responsable debe ser una cuenta activa con acceso al proyecto"
+
+
+def _validar_responsable(db, proyecto_id: int, usuario_id: int) -> None:
+    if not acceso.cuenta_activa(db, usuario_id) or not proyectos.es_participante(db, proyecto_id, usuario_id):
+        raise DatosInvalidos(MSG_RESPONSABLE)
+
+
+def _exigir_planificador(tarea: dict, actor_id: int) -> None:
+    if tarea["proyecto_responsable_id"] != actor_id:
+        raise Prohibido()
+
 
 def crear(db, proyecto: dict, actor_id: int, nombre: str, descripcion: str,
-          resultado_esperado: Optional[str]) -> dict:
+          resultado_esperado: Optional[str], responsable_id: Optional[int] = None) -> dict:
     proyectos.exigir_responsable(proyecto, actor_id)
+    if responsable_id is not None:
+        _validar_responsable(db, proyecto["id"], responsable_id)
     with transaccion(db):
-        tid = repo.insertar(db, proyecto["id"], nombre, descripcion, resultado_esperado or None, actor_id)
+        tid = repo.insertar(db, proyecto["id"], nombre, descripcion, resultado_esperado or None,
+                            responsable_id, actor_id)
+        if responsable_id is not None:
+            repo.registrar_cambio(db, tid, "responsable", None, responsable_id, actor_id)
     return repo.obtener(db, tid)
 
 
@@ -29,4 +48,21 @@ def obtener_autorizada(db, tarea_id: int, usuario_id: int) -> dict:
 
 
 def detalle(tarea: dict, usuario_id: int) -> dict:
-    return {**tarea, "puedo_planificar": tarea["proyecto_responsable_id"] == usuario_id}
+    return {**tarea,
+            "puedo_planificar": tarea["proyecto_responsable_id"] == usuario_id,
+            "soy_asignado": tarea["responsable_id"] == usuario_id}
+
+
+def asignar(db, tarea: dict, actor_id: int, usuario_id: int) -> dict:
+    """HU-03-002: si la validación falla no se toca al responsable anterior."""
+    _exigir_planificador(tarea, actor_id)
+    _validar_responsable(db, tarea["proyecto_id"], usuario_id)
+    if tarea["responsable_id"] != usuario_id:
+        with transaccion(db):
+            repo.actualizar_responsable(db, tarea["id"], usuario_id)
+            repo.registrar_cambio(db, tarea["id"], "responsable", tarea["responsable_id"], usuario_id, actor_id)
+    return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
+
+
+def historial(db, tarea: dict) -> list:
+    return repo.listar_historial(db, tarea["id"])

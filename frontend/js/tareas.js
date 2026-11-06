@@ -12,7 +12,7 @@ function tablaTareas(tareas, { conProyecto = false, conAcciones = false, vacio =
   if (tareas.length === 0) return `<p class="vacio">${vacio}</p>`;
   return `
     <div class="tabla-scroll">
-    <table>
+    <table class="tabla-tareas">
       <thead><tr>
         <th>Tarea</th>${conProyecto ? "<th>Proyecto</th>" : "<th>Responsable</th>"}
         <th>Prioridad</th><th>Fecha límite</th><th>Estado</th>${conAcciones ? "<th></th>" : ""}
@@ -20,11 +20,13 @@ function tablaTareas(tareas, { conProyecto = false, conAcciones = false, vacio =
       <tbody>
         ${tareas.map((t) => `
           <tr class="clic" onclick="location.hash='#/tareas/${t.id}'">
-            <td>${escapar(t.nombre)}</td>
-            <td>${conProyecto ? escapar(t.proyecto_nombre) : (t.responsable_nombre ? escapar(t.responsable_nombre) : SIN_ASIGNAR)}</td>
-            <td>${etiquetaPrioridad(t.prioridad)}</td>
-            <td>${t.fecha_limite || "—"}</td>
-            <td>${etiquetaEstado(t.estado, t.bloqueada)}</td>
+            <td data-label="Tarea">${escapar(t.nombre)}</td>
+            ${conProyecto
+              ? `<td data-label="Proyecto">${escapar(t.proyecto_nombre)}</td>`
+              : `<td data-label="Responsable">${t.responsable_nombre ? escapar(t.responsable_nombre) : SIN_ASIGNAR}</td>`}
+            <td data-label="Prioridad">${etiquetaPrioridad(t.prioridad)}</td>
+            <td data-label="Fecha límite">${t.fecha_limite || "—"}</td>
+            <td data-label="Estado">${etiquetaEstado(t.estado, t.bloqueada)}</td>
             ${conAcciones ? `<td class="acciones">${botonesEstado(t.id, t.estado)}</td>` : ""}
           </tr>`).join("")}
       </tbody>

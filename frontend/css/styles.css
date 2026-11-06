@@ -122,4 +122,13 @@ dd { margin: 0; }
 @media (max-width: 600px) {
   .fila { grid-template-columns: 1fr; }
   header nav { order: 3; flex-basis: 100%; }
+
+  /* Tareas en teléfono: cada fila se muestra como tarjeta con etiquetas */
+  .tabla-tareas thead { display: none; }
+  .tabla-tareas tr { display: block; padding: .5rem 0; border-bottom: 1px solid #e5e7eb; }
+  .tabla-tareas td { display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+                     padding: .2rem .25rem; border: none; }
+  .tabla-tareas td[data-label]::before { content: attr(data-label); color: #555; font-size: .85rem; }
+  .tabla-tareas td:first-child { font-weight: 600; }
+  .tabla-tareas td.acciones { justify-content: flex-end; padding-top: .4rem; }
 }

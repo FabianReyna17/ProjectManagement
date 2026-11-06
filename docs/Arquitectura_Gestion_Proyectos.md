@@ -15,7 +15,7 @@
 | 4. Código | ¿Cómo se refleja en el repositorio? | §4 |
 | Complementario | ¿Dónde y cómo se despliega? | §5 |
 
-**Convención de colores:** azul oscuro = persona · azul = parte del sistema · gris = sistema externo · línea punteada = se agrega en un sprint posterior.
+**Convención:** línea punteada = se agrega en un sprint posterior.
 
 ---
 
@@ -40,15 +40,6 @@ flowchart TB
 
     sistema -- "Envía respaldos<br/>[HTTPS / SFTP]" --> backup
     sistema -. "Enviaría avisos<br/>[SMTP]" .-> correo
-
-    classDef persona fill:#08427b,stroke:#052e56,color:#fff
-    classDef sistema fill:#1168bd,stroke:#0b4884,color:#fff
-    classDef externo fill:#999999,stroke:#6b6b6b,color:#fff
-    classDef futuro fill:#d9d9d9,stroke:#999,color:#333,stroke-dasharray:5 5
-    class admin,resp,integ,sup persona
-    class sistema sistema
-    class backup externo
-    class correo futuro
 ```
 
 **Notas**
@@ -84,13 +75,6 @@ flowchart TB
     api -. "Guarda y entrega adjuntos<br/>(Sprint 4)" .-> files
     sched -. "Consulta vencimientos<br/>(Sprint 5)" .-> db
     sched -. "Sube respaldos<br/>(antes del piloto)" .-> backup
-
-    classDef persona fill:#08427b,stroke:#052e56,color:#fff
-    classDef cont fill:#438dd5,stroke:#2e6295,color:#fff
-    classDef externo fill:#999999,stroke:#6b6b6b,color:#fff
-    class usuario persona
-    class proxy,web,api,sched,db,files cont
-    class backup externo
 ```
 
 | Contenedor | Tecnología | Responsabilidad | Épicas | Desde |
@@ -137,11 +121,6 @@ flowchart TB
     rutas --> s_cuentas & s_proy & s_tar & s_col & s_av & s_rep
     s_cuentas & s_proy & s_tar & s_col & s_av & s_rep --> repos
     repos -- "SQL" --> db
-
-    classDef ext fill:#438dd5,stroke:#2e6295,color:#fff
-    classDef comp fill:#85bbf0,stroke:#5d82a8,color:#000
-    class web,db ext
-    class trans,rutas,s_cuentas,s_proy,s_tar,s_col,s_av,s_rep,repos comp
 ```
 
 | Componente | Responsabilidad | HU clave |
@@ -204,11 +183,6 @@ flowchart TB
     core --> F
     F --> comp
     core -- "JSON / HTTPS" --> api
-
-    classDef ext fill:#438dd5,stroke:#2e6295,color:#fff
-    classDef comp fill:#85bbf0,stroke:#5d82a8,color:#000
-    class api ext
-    class core,f_auth,f_proy,f_tar,f_av,f_rep,f_adm,comp comp
 ```
 
 El `app.js` actual se divide en estos módulos **antes** de agregar tareas y tablero. No se adopta un framework de frontend en la v1; se reevalúa si el tablero lo exige.
@@ -218,7 +192,6 @@ El `app.js` actual se divide en estos módulos **antes** de agregar tareas y tab
 ## 4. Nivel de Código — Estructura del repositorio
 
 Las carpetas se crean cuando llega la historia que las necesita; no se crean vacías.
-
 ```
 ProjectManagement/
 ├── .github/workflows/ci.yml      # pruebas en cada push y PR
@@ -284,11 +257,6 @@ flowchart TB
     apiN --> pg
     apiN --> vol
     apiN -- "respaldos" --> offsite
-
-    classDef cont fill:#438dd5,stroke:#2e6295,color:#fff
-    classDef externo fill:#999999,stroke:#6b6b6b,color:#fff
-    class nginx,apiN,pg,vol cont
-    class gh,offsite,navegador externo
 ```
 
 | Entorno | Dónde | Uso |

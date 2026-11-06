@@ -39,6 +39,16 @@ async def error_negocio(request: Request, exc: ErrorNegocio):
     return JSONResponse(status_code=codigo_http(exc), content={"detail": exc.mensaje})
 
 
+@app.middleware("http")
+async def sin_cache_frontend(request: Request, call_next):
+    """El navegador revalida HTML/JS/CSS en cada carga (ETag): tras actualizar el código
+    nunca se mezcla un index.html nuevo con un app.js viejo."""
+    respuesta = await call_next(request)
+    if not request.url.path.startswith("/api"):
+        respuesta.headers["Cache-Control"] = "no-cache"
+    return respuesta
+
+
 app.include_router(acceso_router)
 app.include_router(proyectos_router)
 app.include_router(tareas_router)

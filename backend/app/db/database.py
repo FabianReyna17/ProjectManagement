@@ -1,9 +1,10 @@
 import os
 import sqlite3
+from contextlib import contextmanager
 
-from .security import hash_password
+from ..core.security import hash_password
 
-DEFAULT_DB = os.path.join(os.path.dirname(__file__), "..", "data", "gestion.db")
+DEFAULT_DB = os.path.join(os.path.dirname(__file__), "..", "..", "data", "gestion.db")
 
 FUNCIONES = ["Admin", "Responsable", "Integrante", "Supervisor"]
 
@@ -79,3 +80,26 @@ def init_db() -> None:
         )
     conn.commit()
     conn.close()
+
+
+def get_db():
+    """Una conexión por petición (FastAPI la reutiliza dentro de la misma petición)."""
+    conn = get_conn()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def transaccion(conn: sqlite3.Connection):
+    """Confirma todo lo hecho dentro del bloque o nada.
+
+    Solo los servicios abren transacciones; los repositorios nunca hacen commit.
+    """
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise

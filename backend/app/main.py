@@ -6,8 +6,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .database import init_db
-from .routers import auth, proyectos, usuarios
+from .core.errors import ErrorNegocio, codigo_http
+from .db.database import init_db
+from .modules.acceso.router import router as acceso_router
+from .modules.proyectos.router import router as proyectos_router
 
 FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
 
@@ -18,7 +20,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Gestión de Proyectos - Sprint 1", lifespan=lifespan)
+app = FastAPI(title="Gestión de Proyectos", lifespan=lifespan)
 
 
 @app.exception_handler(RequestValidationError)
@@ -30,9 +32,14 @@ async def error_validacion(request: Request, exc: RequestValidationError):
     )
 
 
-app.include_router(auth.router)
-app.include_router(usuarios.router)
-app.include_router(proyectos.router)
+@app.exception_handler(ErrorNegocio)
+async def error_negocio(request: Request, exc: ErrorNegocio):
+    """Traduce los errores de los servicios a HTTP con el mismo formato de siempre."""
+    return JSONResponse(status_code=codigo_http(exc), content={"detail": exc.mensaje})
+
+
+app.include_router(acceso_router)
+app.include_router(proyectos_router)
 
 # Frontend estático (se monta al final para no tapar /api)
 if os.path.isdir(FRONTEND_DIR):

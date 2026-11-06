@@ -16,8 +16,8 @@ Ver [docs/Arquitectura_Gestion_Proyectos.md](docs/Arquitectura_Gestion_Proyectos
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # App FastAPI, traduce errores a HTTP, sirve el frontend
-│   │   ├── core/                # Errores, seguridad (hash y tokens), esquema base
-│   │   ├── db/database.py       # Conexión, transacciones, migraciones y admin inicial
+│   │   ├── core/                # Errores, seguridad (hash y tokens), esquema base, cabeceras
+│   │   ├── db/                  # Conexión, transacciones, migraciones, admin inicial e idempotencia
 │   │   └── modules/
 │   │       ├── acceso/          # login, logout, cuentas y funciones
 │   │       ├── proyectos/       # proyectos, ficha y participantes
@@ -90,7 +90,8 @@ Cada prueba usa su propia BD temporal.
 | HU-04-001 | Estados pendiente → en curso → terminada (volver a pendiente y reabrir permitidos); `PUT /api/tareas/{id}/estado` solo para la persona asignada o el responsable; transición inválida → 400 con el motivo; queda en el historial; botones en el detalle y en "Mis tareas" |
 | HU-04-003 | Tabla `bloqueos` aparte del estado (una tarea puede estar en curso y bloqueada); `POST /api/tareas/{id}/bloqueos` exige motivo, guarda autor y fecha; índice único impide dos bloqueos abiertos (409); marca "⛔ Bloqueada" (icono + texto) en detalle y listas; no se puede terminar una tarea bloqueada |
 | HU-04-004 | `POST /api/tareas/{id}/bloqueos/{bid}/resolver` (solo responsable del proyecto) exige explicación y guarda quién y cuándo; la tarea sigue en su estado de trabajo; resolver uno ya cerrado → 409 sin cambiar su historia; `GET /api/tareas/{id}/bloqueos` y sección "Bloqueos resueltos" |
+| HU-08-002 | Cabecera `Idempotency-Key` en las creaciones (proyectos, tareas, bloqueos): la clave se guarda en la misma transacción que el registro (`claves_idempotencia`), un reintento devuelve el existente y uno fallido se registra una sola vez; el frontend genera una clave por formulario y deshabilita el botón durante el envío |
 
 ## Fuera de alcance (siguientes sprints)
 
-Tareas, estados, bloqueos, tablero, avisos, comentarios, edición de proyectos, desactivar cuentas, respaldos.
+Tablero, vencimientos, replanificación con control de versión, historial visible de la tarea, avisos, comentarios, edición de proyectos, desactivar cuentas, respaldos.

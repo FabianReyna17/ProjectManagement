@@ -34,6 +34,11 @@ async function guardar(boton, accion, mensajeOk = "Guardado correctamente") {
   }
 }
 
+// HU-08-002: una clave por acción intencional; los reintentos de esa acción reusan la misma
+function nuevaClave() {
+  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function datosForm(form) {
   return Object.fromEntries(new FormData(form).entries());
 }

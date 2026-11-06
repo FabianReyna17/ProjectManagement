@@ -1,6 +1,7 @@
 """Endpoints de tareas. Solo validan la entrada y llaman al servicio."""
 from fastapi import APIRouter, Depends
 
+from ...core.cabeceras import clave_idempotencia
 from ...db.database import get_db
 from ..acceso.deps import usuario_actual
 from ..proyectos.deps import proyecto_autorizado
@@ -13,9 +14,9 @@ router = APIRouter(prefix="/api", tags=["tareas"])
 
 @router.post("/proyectos/{proyecto_id}/tareas", status_code=201)
 def crear_tarea(data: TareaIn, proyecto: dict = Depends(proyecto_autorizado),
-                u: dict = Depends(usuario_actual), db=Depends(get_db)):
+                u: dict = Depends(usuario_actual), clave=Depends(clave_idempotencia), db=Depends(get_db)):
     return service.crear(db, proyecto, u["id"], data.nombre, data.descripcion, data.resultado_esperado,
-                         data.responsable_id, data.fecha_limite, data.prioridad)
+                         data.responsable_id, data.fecha_limite, data.prioridad, clave)
 
 
 @router.get("/proyectos/{proyecto_id}/tareas")
@@ -53,8 +54,8 @@ def cambiar_estado(data: EstadoIn, tarea: dict = Depends(tarea_autorizada),
 
 @router.post("/tareas/{tarea_id}/bloqueos", status_code=201)
 def registrar_bloqueo(data: BloqueoIn, tarea: dict = Depends(tarea_autorizada),
-                      u: dict = Depends(usuario_actual), db=Depends(get_db)):
-    return service.registrar_bloqueo(db, tarea, u["id"], data.motivo)
+                      u: dict = Depends(usuario_actual), clave=Depends(clave_idempotencia), db=Depends(get_db)):
+    return service.registrar_bloqueo(db, tarea, u["id"], data.motivo, clave)
 
 
 @router.get("/tareas/{tarea_id}/bloqueos")

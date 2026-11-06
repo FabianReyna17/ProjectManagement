@@ -92,3 +92,20 @@ def test_no_se_asigna_tarea_a_cuenta_inactiva(db):
     with pytest.raises(DatosInvalidos):
         tareas.asignar(db, t, ana, beto)
     assert tareas.obtener_autorizada(db, t["id"], ana)["responsable_id"] is None
+
+
+def test_crear_una_vez_si_falla_no_guarda_la_clave(db):
+    from app.db.idempotencia import crear_una_vez
+    ana = acceso.registrar_usuario(db, "ana", "Ana", "clave123", funcion(db, "Responsable"))["id"]
+
+    def falla():
+        db.execute(text("INSERT INTO funciones (nombre) VALUES ('Temporal')"))
+        raise RuntimeError("corte de conexión")
+
+    with pytest.raises(RuntimeError):
+        crear_una_vez(db, ana, "k", "prueba", falla)
+    assert db.execute(text("SELECT COUNT(*) FROM funciones WHERE nombre = 'Temporal'")).scalar() == 0
+    assert crear_una_vez(db, ana, "k", "prueba", lambda: 7) == 7
+    assert crear_una_vez(db, ana, "k", "prueba", lambda: 8) == 7   # reintento: devuelve el primero
+    with pytest.raises(Conflicto):
+        crear_una_vez(db, ana, "k", "otra", lambda: 9)            # misma clave, otra acción

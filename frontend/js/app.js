@@ -131,12 +131,13 @@ async function vistaNuevoProyecto() {
       </form>
     </div>`;
   const form = document.getElementById("f-proyecto");
+  const clave = nuevaClave();  // HU-08-002
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const d = datosForm(form);
     if (d.fecha_fin < d.fecha_inicio) { toast("La fecha de fin no puede ser anterior a la de inicio", "error"); return; }
     d.responsable_id = Number(d.responsable_id);
-    const p = await guardar(form.querySelector("button"), () => API.post("/api/proyectos", d), "Proyecto creado");
+    const p = await guardar(form.querySelector("button"), () => API.crear("/api/proyectos", d, clave), "Proyecto creado");
     if (p) location.hash = `#/proyectos/${p.id}`;
   });
 }

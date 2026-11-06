@@ -13,8 +13,8 @@ const API = {
     localStorage.removeItem("usuario");
   },
 
-  async request(metodo, url, body) {
-    const headers = { "Content-Type": "application/json" };
+  async request(metodo, url, body, extra = {}) {
+    const headers = { "Content-Type": "application/json", ...extra };
     if (this.token()) headers.Authorization = `Bearer ${this.token()}`;
 
     let res;
@@ -39,6 +39,8 @@ const API = {
 
   get(url) { return this.request("GET", url); },
   post(url, body) { return this.request("POST", url, body); },
+  // HU-08-002: creación con clave de operación; repetir la misma clave no duplica
+  crear(url, body, clave) { return this.request("POST", url, body, { "Idempotency-Key": clave }); },
   put(url, body) { return this.request("PUT", url, body); },
   del(url) { return this.request("DELETE", url); },
 };

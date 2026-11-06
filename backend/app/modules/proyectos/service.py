@@ -1,11 +1,13 @@
-"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001, HU-02-002).
+"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001, HU-02-002, HU-08-002).
 
 No importa FastAPI. Para datos de cuentas usa el servicio de acceso, nunca su repositorio.
 """
 from datetime import date
+from typing import Optional
 
 from ...core.errors import Conflicto, DatosInvalidos, NoEncontrado, Prohibido
 from ...db.database import transaccion
+from ...db.idempotencia import crear_una_vez
 from ..acceso import service as acceso
 from . import repository as repo
 
@@ -15,18 +17,21 @@ def mis_proyectos(db, usuario_id: int) -> list:
 
 
 def crear(db, actor_id: int, nombre: str, objetivo: str, responsable_id: int,
-          fecha_inicio: date, fecha_fin: date) -> dict:
+          fecha_inicio: date, fecha_fin: date, clave: Optional[str] = None) -> dict:
     if fecha_fin < fecha_inicio:
         raise DatosInvalidos("La fecha de fin no puede ser anterior a la de inicio")
     if not acceso.puede_ser_responsable(db, responsable_id):
         raise DatosInvalidos("El responsable debe ser una cuenta activa con función Responsable o Admin")
-    with transaccion(db):
+
+    def insertar() -> int:
         pid = repo.insertar(db, nombre, objetivo, responsable_id,
                             fecha_inicio.isoformat(), fecha_fin.isoformat(), actor_id)
         repo.activar_participante(db, pid, responsable_id)
         if actor_id != responsable_id:
             repo.activar_participante(db, pid, actor_id)
-    return repo.obtener(db, pid)
+        return pid
+
+    return repo.obtener(db, crear_una_vez(db, actor_id, clave, "proyecto", insertar))
 
 
 def obtener_autorizado(db, proyecto_id: int, usuario_id: int) -> dict:

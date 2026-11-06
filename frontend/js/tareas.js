@@ -70,13 +70,14 @@ async function vistaNuevaTarea(pid) {
       </form>
     </div>`;
   const form = document.getElementById("f-tarea");
+  const clave = nuevaClave();  // HU-08-002: reintentar este formulario no duplica la tarea
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const d = datosForm(form);
     d.responsable_id = d.responsable_id ? Number(d.responsable_id) : null;
     d.fecha_limite = d.fecha_limite || null;
     const t = await guardar(form.querySelector("button"),
-      () => API.post(`/api/proyectos/${pid}/tareas`, d), "Tarea creada");
+      () => API.crear(`/api/proyectos/${pid}/tareas`, d, clave), "Tarea creada");
     if (t) location.hash = `#/tareas/${t.id}`;
   });
 }
@@ -164,6 +165,7 @@ async function vistaTarea(id) {
 
   // HU-04-003 Registrar bloqueo
   const fBloq = document.getElementById("f-bloqueo");
+  const claveBloqueo = nuevaClave();  // HU-08-002
   document.getElementById("btn-bloquear")?.addEventListener("click", () => {
     fBloq.classList.remove("oculto");
     fBloq.querySelector("textarea").focus();
@@ -172,7 +174,7 @@ async function vistaTarea(id) {
   fBloq.addEventListener("submit", async (e) => {
     e.preventDefault();
     const ok = await guardar(fBloq.querySelector("button"),
-      () => API.post(`/api/tareas/${id}/bloqueos`, datosForm(fBloq)), "Bloqueo registrado");
+      () => API.crear(`/api/tareas/${id}/bloqueos`, datosForm(fBloq), claveBloqueo), "Bloqueo registrado");
     if (ok) vistaTarea(id);
   });
 

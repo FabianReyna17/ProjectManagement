@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003, HU-04-004).
+"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003, HU-04-004, HU-08-002).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -9,6 +9,7 @@ from typing import Optional
 
 from ...core.errors import Conflicto, DatosInvalidos, NoEncontrado, Prohibido
 from ...db.database import transaccion
+from ...db.idempotencia import crear_una_vez
 from ..acceso import service as acceso
 from ..proyectos import service as proyectos
 from . import repository as repo
@@ -42,16 +43,19 @@ def _iso(fecha: Optional[date]) -> Optional[str]:
 
 def crear(db, proyecto: dict, actor_id: int, nombre: str, descripcion: str,
           resultado_esperado: Optional[str], responsable_id: Optional[int] = None,
-          fecha_limite: Optional[date] = None, prioridad: str = "media") -> dict:
+          fecha_limite: Optional[date] = None, prioridad: str = "media", clave: Optional[str] = None) -> dict:
     proyectos.exigir_responsable(proyecto, actor_id)
     if responsable_id is not None:
         _validar_responsable(db, proyecto["id"], responsable_id)
-    with transaccion(db):
+
+    def insertar() -> int:
         tid = repo.insertar(db, proyecto["id"], nombre, descripcion, resultado_esperado or None,
                             responsable_id, _iso(fecha_limite), prioridad, actor_id)
         if responsable_id is not None:
             repo.registrar_cambio(db, tid, "responsable", None, responsable_id, actor_id)
-    return repo.obtener(db, tid)
+        return tid
+
+    return repo.obtener(db, crear_una_vez(db, actor_id, clave, "tarea", insertar))
 
 
 def obtener_autorizada(db, tarea_id: int, usuario_id: int) -> dict:
@@ -140,16 +144,20 @@ def con_bloqueo(db, tarea: dict, usuario_id: int) -> dict:
     return {**detalle(tarea, usuario_id), "bloqueo": repo.bloqueo_abierto(db, tarea["id"])}
 
 
-def registrar_bloqueo(db, tarea: dict, actor_id: int, motivo: str) -> dict:
+def registrar_bloqueo(db, tarea: dict, actor_id: int, motivo: str, clave: Optional[str] = None) -> dict:
     """HU-04-003: abre un bloqueo con motivo, autor y fecha sin cambiar el estado de trabajo."""
     if not _puede_cambiar_estado(tarea, actor_id):
         raise Prohibido(MSG_BLOQUEO_PERMISO)
     if tarea["estado"] == "terminada":
         raise DatosInvalidos("No se puede bloquear una tarea terminada")
+
+    def insertar() -> int:
+        bid = repo.insertar_bloqueo(db, tarea["id"], motivo, actor_id)
+        repo.registrar_cambio(db, tarea["id"], "bloqueo", None, motivo, actor_id)
+        return bid
+
     try:
-        with transaccion(db):
-            bid = repo.insertar_bloqueo(db, tarea["id"], motivo, actor_id)
-            repo.registrar_cambio(db, tarea["id"], "bloqueo", None, motivo, actor_id)
+        bid = crear_una_vez(db, actor_id, clave, "bloqueo", insertar)
     except repo.BloqueoYaAbierto:
         raise Conflicto("La tarea ya tiene un bloqueo abierto")
     return repo.obtener_bloqueo(db, bid)

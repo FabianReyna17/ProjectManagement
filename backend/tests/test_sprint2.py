@@ -253,3 +253,41 @@ def test_resolver_bloqueo_cerrado_sin_explicacion_o_sin_permiso(esc):
     assert r.status_code == 409
     [guardado] = esc.c.get(f"/api/tareas/{t['id']}/bloqueos", headers=esc.ana).json()
     assert guardado["resolucion"] == "Listo"  # no cambia su historia
+
+
+# HU-08-002 Reintentar sin duplicar
+def test_reintento_con_la_misma_clave_no_duplica(esc):
+    url, datos = f"/api/proyectos/{esc.pid}/tareas", {"nombre": "Doble clic", "descripcion": "D"}
+    clave = {**esc.ana, "Idempotency-Key": "tarea-123"}
+    r1 = esc.c.post(url, headers=clave, json=datos)
+    r2 = esc.c.post(url, headers=clave, json=datos)  # reintento tras perder la respuesta
+    assert r1.status_code == r2.status_code == 201 and r1.json()["id"] == r2.json()["id"]
+    assert len(esc.c.get(url, headers=esc.ana).json()) == 1
+
+    # dos acciones intencionales con contenido igual pero claves distintas → dos tareas
+    esc.c.post(url, headers={**esc.ana, "Idempotency-Key": "tarea-456"}, json=datos)
+    esc.c.post(url, headers=esc.ana, json=datos)  # sin clave: siempre crea
+    assert len(esc.c.get(url, headers=esc.ana).json()) == 3
+
+
+def test_reintento_de_proyecto_y_bloqueo(esc):
+    clave = {**esc.ana, "Idempotency-Key": "proy-1"}
+    datos = {"nombre": "Nuevo", "objetivo": "O", "responsable_id": esc.ana_id,
+             "fecha_inicio": "2026-11-01", "fecha_fin": "2026-12-01"}
+    ids = {esc.c.post("/api/proyectos", headers=clave, json=datos).json()["id"] for _ in range(2)}
+    assert len(ids) == 1 and len(esc.c.get("/api/proyectos", headers=esc.ana).json()) == 2
+
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    url, clave = f"/api/tareas/{t['id']}/bloqueos", {**esc.beto, "Idempotency-Key": "bloq-1"}
+    r1 = esc.c.post(url, headers=clave, json={"motivo": "Sin datos"})
+    r2 = esc.c.post(url, headers=clave, json={"motivo": "Sin datos"})
+    assert r1.status_code == r2.status_code == 201 and r1.json()["id"] == r2.json()["id"]  # muestra el existente
+
+
+def test_primer_envio_fallido_se_registra_una_vez_en_el_reintento(esc):
+    url, clave = f"/api/proyectos/{esc.pid}/tareas", {**esc.ana, "Idempotency-Key": "k-1"}
+    malo = esc.c.post(url, headers=clave, json={"nombre": "T", "descripcion": "D", "responsable_id": esc.carla_id})
+    assert malo.status_code == 400  # no se guardó: la clave tampoco
+    ok = [esc.c.post(url, headers=clave, json={"nombre": "T", "descripcion": "D"}) for _ in range(2)]
+    assert [r.status_code for r in ok] == [201, 201] and ok[0].json()["id"] == ok[1].json()["id"]
+    assert len(esc.c.get(url, headers=esc.ana).json()) == 1

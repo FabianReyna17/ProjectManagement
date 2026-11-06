@@ -1,6 +1,7 @@
 """Endpoints de proyectos y participantes. Solo validan la entrada y llaman al servicio."""
 from fastapi import APIRouter, Depends
 
+from ...core.cabeceras import clave_idempotencia
 from ...db.database import get_db
 from ..acceso.deps import requiere_funcion, usuario_actual
 from . import service
@@ -16,9 +17,10 @@ def mis_proyectos(u: dict = Depends(usuario_actual), db=Depends(get_db)):
 
 
 @router.post("", status_code=201)
-def crear_proyecto(data: ProyectoIn, u: dict = Depends(requiere_funcion("Admin", "Responsable")), db=Depends(get_db)):
+def crear_proyecto(data: ProyectoIn, u: dict = Depends(requiere_funcion("Admin", "Responsable")),
+                   clave=Depends(clave_idempotencia), db=Depends(get_db)):
     return service.crear(db, u["id"], data.nombre, data.objetivo, data.responsable_id,
-                         data.fecha_inicio, data.fecha_fin)
+                         data.fecha_inicio, data.fecha_fin, clave)
 
 
 @router.get("/{proyecto_id}")

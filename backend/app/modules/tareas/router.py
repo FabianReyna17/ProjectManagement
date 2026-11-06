@@ -23,6 +23,11 @@ def tareas_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), db=Depend
     return service.listar_de_proyecto(db, proyecto)
 
 
+@router.get("/mis-tareas")
+def mis_tareas(u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.mis_tareas(db, u["id"])
+
+
 @router.get("/tareas/{tarea_id}")
 def detalle_tarea(tarea: dict = Depends(tarea_autorizada), u: dict = Depends(usuario_actual)):
     return service.detalle(tarea, u["id"])

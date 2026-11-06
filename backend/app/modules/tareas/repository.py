@@ -37,6 +37,21 @@ def listar_de_proyecto(db, proyecto_id: int) -> list:
                            WHERE t.proyecto_id = :p ORDER BY t.id""", p=proyecto_id)
 
 
+def listar_asignadas(db, usuario_id: int) -> list:
+    """Tareas asignadas al usuario en proyectos donde aún participa.
+    Primero las abiertas, por fecha límite (sin fecha al final) y prioridad."""
+    return varios(db, f"""SELECT {COLUMNAS_LISTA}, p.nombre AS proyecto_nombre
+                           FROM tareas t
+                           JOIN proyectos p     ON p.id = t.proyecto_id
+                           JOIN participantes pa ON pa.proyecto_id = t.proyecto_id
+                                                AND pa.usuario_id = :u AND pa.activo = 1
+                           LEFT JOIN usuarios r ON r.id = t.responsable_id
+                           WHERE t.responsable_id = :u
+                           ORDER BY t.estado = 'terminada', t.fecha_limite IS NULL, t.fecha_limite,
+                                    CASE t.prioridad WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END,
+                                    t.id""", u=usuario_id)
+
+
 def actualizar_responsable(db, tarea_id: int, responsable_id: int) -> None:
     db.execute(text("UPDATE tareas SET responsable_id = :r WHERE id = :id"), {"r": responsable_id, "id": tarea_id})
 

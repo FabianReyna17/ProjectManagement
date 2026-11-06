@@ -136,3 +136,22 @@ def test_tareas_del_proyecto_sin_mezclar_y_con_permisos(esc):
     assert {"estado", "prioridad", "fecha_limite"} <= lista[0].keys()
     assert esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.carla).status_code == 403
     assert esc.c.get(f"/api/proyectos/{otro}/tareas", headers=esc.beto).status_code == 403
+
+
+# HU-03-004 Consultar mis tareas
+def test_mis_tareas_solo_propias_y_accesibles(esc):
+    t1 = crear_tarea(esc, nombre="Tarde", responsable_id=esc.beto_id, fecha_limite="2026-11-30")
+    t2 = crear_tarea(esc, nombre="Pronto", responsable_id=esc.beto_id, fecha_limite="2026-11-10", prioridad="alta")
+    crear_tarea(esc, nombre="De Ana", responsable_id=esc.ana_id)
+    mias = esc.c.get("/api/mis-tareas", headers=esc.beto).json()
+    assert [t["id"] for t in mias] == [t2["id"], t1["id"]]  # ordenadas por fecha límite
+    assert mias[0]["proyecto_nombre"] == "Web" and mias[0]["prioridad"] == "alta"
+
+    # reasignada → ya no aparece
+    esc.c.put(f"/api/tareas/{t2['id']}/responsable", headers=esc.ana, json={"usuario_id": esc.ana_id})
+    assert [t["id"] for t in esc.c.get("/api/mis-tareas", headers=esc.beto).json()] == [t1["id"]]
+    # sin acceso al proyecto → ya no aparece ni se abre
+    esc.c.delete(f"/api/proyectos/{esc.pid}/participantes/{esc.beto_id}", headers=esc.ana)
+    assert esc.c.get("/api/mis-tareas", headers=esc.beto).json() == []
+    assert esc.c.get(f"/api/tareas/{t1['id']}", headers=esc.beto).status_code == 403
+    assert esc.c.get("/api/mis-tareas").status_code == 401

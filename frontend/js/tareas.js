@@ -31,6 +31,16 @@ function tablaTareas(tareas, { conProyecto = false, vacio = "No hay tareas." } =
     </div>`;
 }
 
+// HU-03-004 Consultar mis tareas (de todos mis proyectos con acceso)
+async function vistaMisTareas() {
+  const tareas = await API.get("/api/mis-tareas");
+  app.innerHTML = `
+    <div class="tarjeta">
+      <h1>Mis tareas</h1>
+      ${tablaTareas(tareas, { conProyecto: true, vacio: "No tienes tareas asignadas." })}
+    </div>`;
+}
+
 // HU-03-001 Crear tarea (solo el responsable del proyecto)
 async function vistaNuevaTarea(pid) {
   const p = await API.get(`/api/proyectos/${pid}`);

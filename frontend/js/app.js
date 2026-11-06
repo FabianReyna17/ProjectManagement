@@ -8,6 +8,7 @@ const rutas = [
   { patron: /^#\/proyectos\/(\d+)$/, vista: vistaProyecto },
   { patron: /^#\/proyectos\/(\d+)\/tareas\/nueva$/, vista: vistaNuevaTarea },
   { patron: /^#\/tareas\/(\d+)$/, vista: vistaTarea },
+  { patron: /^#\/mis-tareas$/, vista: vistaMisTareas },
   { patron: /^#\/usuarios$/, vista: vistaUsuarios },
   { patron: /^#\/sin-acceso$/, vista: vistaSinAcceso },
 ];

@@ -27,6 +27,16 @@ def obtener(db, tarea_id: int) -> Optional[dict]:
                        WHERE t.id = :id""", id=tarea_id)
 
 
+COLUMNAS_LISTA = """t.id, t.proyecto_id, t.nombre, t.estado, t.prioridad, t.fecha_limite,
+                     t.responsable_id, r.nombre AS responsable_nombre"""
+
+
+def listar_de_proyecto(db, proyecto_id: int) -> list:
+    return varios(db, f"""SELECT {COLUMNAS_LISTA}
+                           FROM tareas t LEFT JOIN usuarios r ON r.id = t.responsable_id
+                           WHERE t.proyecto_id = :p ORDER BY t.id""", p=proyecto_id)
+
+
 def actualizar_responsable(db, tarea_id: int, responsable_id: int) -> None:
     db.execute(text("UPDATE tareas SET responsable_id = :r WHERE id = :id"), {"r": responsable_id, "id": tarea_id})
 

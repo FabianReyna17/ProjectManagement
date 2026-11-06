@@ -18,6 +18,11 @@ def crear_tarea(data: TareaIn, proyecto: dict = Depends(proyecto_autorizado),
                          data.responsable_id, data.fecha_limite, data.prioridad)
 
 
+@router.get("/proyectos/{proyecto_id}/tareas")
+def tareas_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), db=Depends(get_db)):
+    return service.listar_de_proyecto(db, proyecto)
+
+
 @router.get("/tareas/{tarea_id}")
 def detalle_tarea(tarea: dict = Depends(tarea_autorizada), u: dict = Depends(usuario_actual)):
     return service.detalle(tarea, u["id"])

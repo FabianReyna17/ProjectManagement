@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001, HU-03-002, HU-03-003).
+"""Reglas de tareas (HU-03-001 a HU-03-003, HU-03-005).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -57,6 +57,11 @@ def detalle(tarea: dict, usuario_id: int) -> dict:
     return {**tarea,
             "puedo_planificar": tarea["proyecto_responsable_id"] == usuario_id,
             "soy_asignado": tarea["responsable_id"] == usuario_id}
+
+
+def listar_de_proyecto(db, proyecto: dict) -> list:
+    """HU-03-005: tareas del proyecto (ya autorizado); responsable_id null = sin asignar."""
+    return repo.listar_de_proyecto(db, proyecto["id"])
 
 
 def asignar(db, tarea: dict, actor_id: int, usuario_id: int) -> dict:

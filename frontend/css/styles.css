@@ -87,6 +87,9 @@ dd { margin: 0; }
 
 .estado-en_curso { background: #bee3f8; }
 .estado-terminada { background: #c6f6d5; }
+.aviso-sin-asignar { color: #b7791f; font-weight: 600; }
+.tabla-scroll { overflow-x: auto; }
+
 .prioridad-alta { background: #fed7d7; }
 .prioridad-baja { background: #edf2f7; color: #555; }
 

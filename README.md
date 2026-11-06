@@ -85,6 +85,7 @@ Cada prueba usa su propia BD temporal.
 | HU-03-001 | `POST /api/proyectos/{id}/tareas` (solo responsable del proyecto), estado inicial "pendiente"; `GET /api/tareas/{id}`; formulario "Nueva tarea" y detalle |
 | HU-03-002 | `PUT /api/tareas/{id}/responsable` (solo responsable del proyecto) valida cuenta activa y participante; cada cambio queda en `historial_tareas` (anterior, nuevo, actor, fecha) — `GET /api/tareas/{id}/historial`; selector en la tarea y al crearla |
 | HU-03-003 | `PUT /api/tareas/{id}/planificacion` (fecha límite opcional y prioridad alta/media/baja); fecha o prioridad inválida → 400 indicando el campo; cada cambio guarda valor anterior y actor |
+| HU-03-005 | `GET /api/proyectos/{id}/tareas` (participantes del proyecto); lista en la ficha con responsable, prioridad, fecha y estado; las no asignadas se marcan "⚠ Sin asignar" |
 
 ## Fuera de alcance (siguientes sprints)
 

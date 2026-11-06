@@ -5,6 +5,32 @@ function opcionesPersonas(personas, seleccionado, vacio) {
     personas.map((x) => `<option value="${x.id}" ${x.id === seleccionado ? "selected" : ""}>${escapar(x.nombre)}</option>`).join("");
 }
 
+const SIN_ASIGNAR = `<span class="aviso-sin-asignar">⚠ Sin asignar</span>`;
+
+/** Tabla de tareas; cada fila abre el detalle. Reutilizada por el proyecto y "Mis tareas". */
+function tablaTareas(tareas, { conProyecto = false, vacio = "No hay tareas." } = {}) {
+  if (tareas.length === 0) return `<p class="vacio">${vacio}</p>`;
+  return `
+    <div class="tabla-scroll">
+    <table>
+      <thead><tr>
+        <th>Tarea</th>${conProyecto ? "<th>Proyecto</th>" : "<th>Responsable</th>"}
+        <th>Prioridad</th><th>Fecha límite</th><th>Estado</th>
+      </tr></thead>
+      <tbody>
+        ${tareas.map((t) => `
+          <tr class="clic" onclick="location.hash='#/tareas/${t.id}'">
+            <td>${escapar(t.nombre)}</td>
+            <td>${conProyecto ? escapar(t.proyecto_nombre) : (t.responsable_nombre ? escapar(t.responsable_nombre) : SIN_ASIGNAR)}</td>
+            <td>${etiquetaPrioridad(t.prioridad)}</td>
+            <td>${t.fecha_limite || "—"}</td>
+            <td>${etiquetaEstado(t.estado)}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>
+    </div>`;
+}
+
 // HU-03-001 Crear tarea (solo el responsable del proyecto)
 async function vistaNuevaTarea(pid) {
   const p = await API.get(`/api/proyectos/${pid}`);
@@ -47,7 +73,6 @@ async function vistaNuevaTarea(pid) {
 async function vistaTarea(id) {
   const t = await API.get(`/api/tareas/${id}`);
   const participantes = t.puedo_planificar ? await API.get(`/api/proyectos/${t.proyecto_id}/participantes`) : [];
-  const sinAsignar = `<span class="vacio">Sin asignar</span>`;
 
   app.innerHTML = `
     <div class="tarjeta">
@@ -60,7 +85,7 @@ async function vistaTarea(id) {
         <dt>Descripción</dt><dd>${escapar(t.descripcion)}</dd>
         <dt>Resultado esperado</dt>
         <dd>${t.resultado_esperado ? escapar(t.resultado_esperado) : `<span class="vacio">Sin definir</span>`}</dd>
-        <dt>Responsable</dt><dd>${t.responsable_nombre ? escapar(t.responsable_nombre) : sinAsignar}</dd>
+        <dt>Responsable</dt><dd>${t.responsable_nombre ? escapar(t.responsable_nombre) : SIN_ASIGNAR}</dd>
         <dt>Prioridad</dt><dd>${etiquetaPrioridad(t.prioridad)}</dd>
         <dt>Fecha límite</dt><dd>${t.fecha_limite || `<span class="vacio">Sin fecha</span>`}</dd>
         <dt>Creada por</dt><dd>${escapar(t.creado_por_nombre)} · ${fechaHora(t.creado_en)}</dd>

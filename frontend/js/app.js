@@ -140,10 +140,11 @@ async function vistaNuevoProyecto() {
   });
 }
 
-// HU-02-002 Ficha del proyecto + HU-01-005 Participantes
+// HU-02-002 Ficha del proyecto + HU-03-005 Tareas + HU-01-005 Participantes
 async function vistaProyecto(id) {
   const p = await API.get(`/api/proyectos/${id}`);
-  const participantes = await API.get(`/api/proyectos/${id}/participantes`);
+  const [participantes, tareas] = await Promise.all([
+    API.get(`/api/proyectos/${id}/participantes`), API.get(`/api/proyectos/${id}/tareas`)]);
   let candidatos = [];
   if (p.soy_responsable) {
     const ids = new Set(participantes.map((x) => x.id));
@@ -169,6 +170,7 @@ async function vistaProyecto(id) {
         <h2>Tareas</h2>
         ${p.soy_responsable ? `<button onclick="location.hash='#/proyectos/${id}/tareas/nueva'">+ Nueva tarea</button>` : ""}
       </div>
+      ${tablaTareas(tareas, { vacio: "El proyecto aún no tiene tareas." })}
     </div>
 
     <div class="tarjeta">

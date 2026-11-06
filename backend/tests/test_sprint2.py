@@ -120,3 +120,19 @@ def test_fecha_o_prioridad_invalida_no_guarda(esc):
     actual = esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()
     assert (actual["fecha_limite"], actual["prioridad"]) == ("2026-11-20", "media")
     assert esc.c.get(f"/api/tareas/{t['id']}/historial", headers=esc.ana).json() == []
+
+
+# HU-03-005 Revisar tareas del proyecto
+def test_tareas_del_proyecto_sin_mezclar_y_con_permisos(esc):
+    asignada = crear_tarea(esc, nombre="A", responsable_id=esc.beto_id)
+    libre = crear_tarea(esc, nombre="B")
+    otro = esc.c.post("/api/proyectos", headers=esc.ana, json={
+        "nombre": "Otro", "objetivo": "O", "responsable_id": esc.ana_id,
+        "fecha_inicio": "2026-11-01", "fecha_fin": "2026-12-01"}).json()["id"]
+    esc.c.post(f"/api/proyectos/{otro}/tareas", headers=esc.ana, json={"nombre": "C", "descripcion": "D"})
+
+    lista = esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.beto).json()
+    assert [(t["id"], t["responsable_nombre"]) for t in lista] == [(asignada["id"], "Beto"), (libre["id"], None)]
+    assert {"estado", "prioridad", "fecha_limite"} <= lista[0].keys()
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.carla).status_code == 403
+    assert esc.c.get(f"/api/proyectos/{otro}/tareas", headers=esc.beto).status_code == 403

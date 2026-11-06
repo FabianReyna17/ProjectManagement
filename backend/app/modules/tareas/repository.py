@@ -56,6 +56,10 @@ def actualizar_responsable(db, tarea_id: int, responsable_id: int) -> None:
     db.execute(text("UPDATE tareas SET responsable_id = :r WHERE id = :id"), {"r": responsable_id, "id": tarea_id})
 
 
+def actualizar_estado(db, tarea_id: int, estado: str) -> None:
+    db.execute(text("UPDATE tareas SET estado = :e WHERE id = :id"), {"e": estado, "id": tarea_id})
+
+
 def actualizar_plan(db, tarea_id: int, fecha_limite: Optional[str], prioridad: str) -> None:
     db.execute(text("UPDATE tareas SET fecha_limite = :f, prioridad = :p WHERE id = :id"),
                {"f": fecha_limite, "p": prioridad, "id": tarea_id})

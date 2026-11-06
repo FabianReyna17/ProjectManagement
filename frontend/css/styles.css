@@ -61,6 +61,9 @@ button {
 button:disabled { opacity: .6; cursor: wait; }
 button.secundario { background: #e2e8f0; color: #222; }
 button.peligro { background: #c53030; }
+button.chico { padding: .25rem .6rem; font-size: .85rem; }
+.acciones { display: flex; gap: .4rem; flex-wrap: wrap; }
+.barra-acciones { margin-top: 1rem; }
 
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: .5rem; border-bottom: 1px solid #e5e7eb; }

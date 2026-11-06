@@ -87,6 +87,7 @@ Cada prueba usa su propia BD temporal.
 | HU-03-003 | `PUT /api/tareas/{id}/planificacion` (fecha límite opcional y prioridad alta/media/baja); fecha o prioridad inválida → 400 indicando el campo; cada cambio guarda valor anterior y actor |
 | HU-03-005 | `GET /api/proyectos/{id}/tareas` (participantes del proyecto); lista en la ficha con responsable, prioridad, fecha y estado; las no asignadas se marcan "⚠ Sin asignar" |
 | HU-03-004 | `GET /api/mis-tareas`: tareas asignadas en proyectos donde aún participo (abiertas primero, por fecha y prioridad); vista "Mis tareas" con proyecto, prioridad, fecha y estado, abre el detalle |
+| HU-04-001 | Estados pendiente → en curso → terminada (volver a pendiente y reabrir permitidos); `PUT /api/tareas/{id}/estado` solo para la persona asignada o el responsable; transición inválida → 400 con el motivo; queda en el historial; botones en el detalle y en "Mis tareas" |
 
 ## Fuera de alcance (siguientes sprints)
 

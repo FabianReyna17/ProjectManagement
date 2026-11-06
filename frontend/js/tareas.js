@@ -8,14 +8,14 @@ function opcionesPersonas(personas, seleccionado, vacio) {
 const SIN_ASIGNAR = `<span class="aviso-sin-asignar">⚠ Sin asignar</span>`;
 
 /** Tabla de tareas; cada fila abre el detalle. Reutilizada por el proyecto y "Mis tareas". */
-function tablaTareas(tareas, { conProyecto = false, vacio = "No hay tareas." } = {}) {
+function tablaTareas(tareas, { conProyecto = false, conAcciones = false, vacio = "No hay tareas." } = {}) {
   if (tareas.length === 0) return `<p class="vacio">${vacio}</p>`;
   return `
     <div class="tabla-scroll">
     <table>
       <thead><tr>
         <th>Tarea</th>${conProyecto ? "<th>Proyecto</th>" : "<th>Responsable</th>"}
-        <th>Prioridad</th><th>Fecha límite</th><th>Estado</th>
+        <th>Prioridad</th><th>Fecha límite</th><th>Estado</th>${conAcciones ? "<th></th>" : ""}
       </tr></thead>
       <tbody>
         ${tareas.map((t) => `
@@ -25,6 +25,7 @@ function tablaTareas(tareas, { conProyecto = false, vacio = "No hay tareas." } =
             <td>${etiquetaPrioridad(t.prioridad)}</td>
             <td>${t.fecha_limite || "—"}</td>
             <td>${etiquetaEstado(t.estado)}</td>
+            ${conAcciones ? `<td class="acciones">${botonesEstado(t.id, t.estado)}</td>` : ""}
           </tr>`).join("")}
       </tbody>
     </table>
@@ -37,8 +38,9 @@ async function vistaMisTareas() {
   app.innerHTML = `
     <div class="tarjeta">
       <h1>Mis tareas</h1>
-      ${tablaTareas(tareas, { conProyecto: true, vacio: "No tienes tareas asignadas." })}
+      ${tablaTareas(tareas, { conProyecto: true, conAcciones: true, vacio: "No tienes tareas asignadas." })}
     </div>`;
+  conectarBotonesEstado(app, vistaMisTareas);  // HU-04-001 desde la lista
 }
 
 // HU-03-001 Crear tarea (solo el responsable del proyecto)
@@ -100,6 +102,7 @@ async function vistaTarea(id) {
         <dt>Fecha límite</dt><dd>${t.fecha_limite || `<span class="vacio">Sin fecha</span>`}</dd>
         <dt>Creada por</dt><dd>${escapar(t.creado_por_nombre)} · ${fechaHora(t.creado_en)}</dd>
       </dl>
+      ${t.transiciones.length ? `<div class="acciones barra-acciones">${botonesEstado(t.id, t.estado, t.transiciones)}</div>` : ""}
     </div>
 
     ${t.puedo_planificar ? `
@@ -117,6 +120,8 @@ async function vistaTarea(id) {
         <div><button>Guardar fecha y prioridad</button></div>
       </form>
     </div>` : ""}`;
+
+  conectarBotonesEstado(app, () => vistaTarea(id));  // HU-04-001
 
   // HU-03-002 Asignar responsable
   const fResp = document.getElementById("f-responsable");

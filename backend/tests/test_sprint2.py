@@ -155,3 +155,30 @@ def test_mis_tareas_solo_propias_y_accesibles(esc):
     assert esc.c.get("/api/mis-tareas", headers=esc.beto).json() == []
     assert esc.c.get(f"/api/tareas/{t1['id']}", headers=esc.beto).status_code == 403
     assert esc.c.get("/api/mis-tareas").status_code == 401
+
+
+# HU-04-001 Cambiar estado de tarea
+def test_transiciones_validas_se_reflejan_y_registran(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    url = f"/api/tareas/{t['id']}/estado"
+    assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.beto).json()["transiciones"] == ["en_curso"]
+    r = esc.c.put(url, headers=esc.beto, json={"estado": "en_curso"})
+    assert r.status_code == 200 and r.json()["estado"] == "en_curso"
+    assert esc.c.get("/api/mis-tareas", headers=esc.beto).json()[0]["estado"] == "en_curso"
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.ana).json()[0]["estado"] == "en_curso"
+    assert esc.c.put(url, headers=esc.ana, json={"estado": "terminada"}).status_code == 200  # responsable del proyecto
+    estados = [(h["valor_anterior"], h["valor_nuevo"], h["actor_nombre"])
+               for h in esc.c.get(f"/api/tareas/{t['id']}/historial", headers=esc.ana).json() if h["tipo"] == "estado"]
+    assert estados == [("pendiente", "en_curso", "Beto"), ("en_curso", "terminada", "Ana")]
+
+
+def test_transicion_invalida_o_sin_permiso_no_cambia(esc):
+    t = crear_tarea(esc)  # sin asignar
+    url = f"/api/tareas/{t['id']}/estado"
+    r = esc.c.put(url, headers=esc.ana, json={"estado": "terminada"})
+    assert r.status_code == 400 and "Pendiente" in r.json()["detail"]
+    assert esc.c.put(url, headers=esc.ana, json={"estado": "archivada"}).status_code == 400
+    r = esc.c.put(url, headers=esc.beto, json={"estado": "en_curso"})  # participa pero no está asignado
+    assert r.status_code == 403 and "asignada" in r.json()["detail"]
+    assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.beto).json()["transiciones"] == []
+    assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()["estado"] == "pendiente"

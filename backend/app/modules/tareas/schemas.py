@@ -7,6 +7,7 @@ from ...core.schemas import Base
 
 
 Prioridad = Literal["alta", "media", "baja"]
+Estado = Literal["pendiente", "en_curso", "terminada"]
 
 
 class TareaIn(Base):
@@ -26,3 +27,7 @@ class PlanificacionIn(Base):
     """Se envían ambos valores; fecha_limite null deja la tarea sin fecha."""
     fecha_limite: Optional[date]
     prioridad: Prioridad
+
+
+class EstadoIn(Base):
+    estado: Estado

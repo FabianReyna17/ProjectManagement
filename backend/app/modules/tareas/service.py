@@ -1,9 +1,10 @@
-"""Reglas de tareas (HU-03-001, HU-03-002).
+"""Reglas de tareas (HU-03-001, HU-03-002, HU-03-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
 Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
 """
+from datetime import date
 from typing import Optional
 
 from ...core.errors import DatosInvalidos, Prohibido
@@ -25,14 +26,19 @@ def _exigir_planificador(tarea: dict, actor_id: int) -> None:
         raise Prohibido()
 
 
+def _iso(fecha: Optional[date]) -> Optional[str]:
+    return fecha.isoformat() if fecha else None
+
+
 def crear(db, proyecto: dict, actor_id: int, nombre: str, descripcion: str,
-          resultado_esperado: Optional[str], responsable_id: Optional[int] = None) -> dict:
+          resultado_esperado: Optional[str], responsable_id: Optional[int] = None,
+          fecha_limite: Optional[date] = None, prioridad: str = "media") -> dict:
     proyectos.exigir_responsable(proyecto, actor_id)
     if responsable_id is not None:
         _validar_responsable(db, proyecto["id"], responsable_id)
     with transaccion(db):
         tid = repo.insertar(db, proyecto["id"], nombre, descripcion, resultado_esperado or None,
-                            responsable_id, actor_id)
+                            responsable_id, _iso(fecha_limite), prioridad, actor_id)
         if responsable_id is not None:
             repo.registrar_cambio(db, tid, "responsable", None, responsable_id, actor_id)
     return repo.obtener(db, tid)
@@ -61,6 +67,22 @@ def asignar(db, tarea: dict, actor_id: int, usuario_id: int) -> dict:
         with transaccion(db):
             repo.actualizar_responsable(db, tarea["id"], usuario_id)
             repo.registrar_cambio(db, tarea["id"], "responsable", tarea["responsable_id"], usuario_id, actor_id)
+    return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
+
+
+def planificar(db, tarea: dict, actor_id: int, fecha_limite: Optional[date], prioridad: str) -> dict:
+    """HU-03-003: fecha límite (puede quedar sin fecha) y prioridad. Cada valor que cambia
+    se registra con su valor anterior. La validación de formato y catálogo la hace el esquema."""
+    _exigir_planificador(tarea, actor_id)
+    nueva_fecha = _iso(fecha_limite)
+    cambios = [(campo, tarea[campo], nuevo)
+               for campo, nuevo in (("fecha_limite", nueva_fecha), ("prioridad", prioridad))
+               if tarea[campo] != nuevo]
+    if cambios:
+        with transaccion(db):
+            repo.actualizar_plan(db, tarea["id"], nueva_fecha, prioridad)
+            for campo, anterior, nuevo in cambios:
+                repo.registrar_cambio(db, tarea["id"], campo, anterior, nuevo, actor_id)
     return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
 
 

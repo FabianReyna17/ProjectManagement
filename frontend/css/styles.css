@@ -87,6 +87,8 @@ dd { margin: 0; }
 
 .estado-en_curso { background: #bee3f8; }
 .estado-terminada { background: #c6f6d5; }
+.prioridad-alta { background: #fed7d7; }
+.prioridad-baja { background: #edf2f7; color: #555; }
 
 #toast {
   position: fixed;

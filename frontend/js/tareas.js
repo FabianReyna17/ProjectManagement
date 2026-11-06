@@ -21,6 +21,10 @@ async function vistaNuevaTarea(pid) {
         <label>Responsable
           <select name="responsable_id">${opcionesPersonas(participantes, null, "Sin asignar")}</select>
         </label>
+        <div class="fila">
+          <label>Fecha límite (opcional) <input type="date" name="fecha_limite"></label>
+          <label>Prioridad <select name="prioridad">${opcionesPrioridad()}</select></label>
+        </div>
         <div>
           <button>Crear tarea</button>
           <button type="button" class="secundario" onclick="location.hash='#/proyectos/${pid}'">Cancelar</button>
@@ -32,6 +36,7 @@ async function vistaNuevaTarea(pid) {
     e.preventDefault();
     const d = datosForm(form);
     d.responsable_id = d.responsable_id ? Number(d.responsable_id) : null;
+    d.fecha_limite = d.fecha_limite || null;
     const t = await guardar(form.querySelector("button"),
       () => API.post(`/api/proyectos/${pid}/tareas`, d), "Tarea creada");
     if (t) location.hash = `#/tareas/${t.id}`;
@@ -56,6 +61,8 @@ async function vistaTarea(id) {
         <dt>Resultado esperado</dt>
         <dd>${t.resultado_esperado ? escapar(t.resultado_esperado) : `<span class="vacio">Sin definir</span>`}</dd>
         <dt>Responsable</dt><dd>${t.responsable_nombre ? escapar(t.responsable_nombre) : sinAsignar}</dd>
+        <dt>Prioridad</dt><dd>${etiquetaPrioridad(t.prioridad)}</dd>
+        <dt>Fecha límite</dt><dd>${t.fecha_limite || `<span class="vacio">Sin fecha</span>`}</dd>
         <dt>Creada por</dt><dd>${escapar(t.creado_por_nombre)} · ${fechaHora(t.creado_en)}</dd>
       </dl>
     </div>
@@ -69,6 +76,11 @@ async function vistaTarea(id) {
         </label>
         <div class="accion"><button>Asignar</button></div>
       </form>
+      <form id="f-plan" class="fila" style="margin-top:1rem">
+        <label>Fecha límite <input type="date" name="fecha_limite" value="${t.fecha_limite || ""}"></label>
+        <label>Prioridad <select name="prioridad">${opcionesPrioridad(t.prioridad)}</select></label>
+        <div><button>Guardar fecha y prioridad</button></div>
+      </form>
     </div>` : ""}`;
 
   // HU-03-002 Asignar responsable
@@ -78,6 +90,17 @@ async function vistaTarea(id) {
     const usuario_id = Number(datosForm(fResp).usuario_id);
     const ok = await guardar(fResp.querySelector("button"),
       () => API.put(`/api/tareas/${id}/responsable`, { usuario_id }), "Responsable asignado");
+    if (ok) vistaTarea(id);
+  });
+
+  // HU-03-003 Fecha límite y prioridad
+  const fPlan = document.getElementById("f-plan");
+  fPlan?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const d = datosForm(fPlan);
+    const cuerpo = { fecha_limite: d.fecha_limite || null, prioridad: d.prioridad };
+    const ok = await guardar(fPlan.querySelector("button"),
+      () => API.put(`/api/tareas/${id}/planificacion`, cuerpo), "Planificación guardada");
     if (ok) vistaTarea(id);
   });
 }

@@ -50,3 +50,14 @@ const ESTADOS_TAREA = { pendiente: "Pendiente", en_curso: "En curso", terminada:
 function etiquetaEstado(estado) {
   return `<span class="etiqueta estado-${estado}">${escapar(ESTADOS_TAREA[estado] || estado)}</span>`;
 }
+
+const PRIORIDADES = { alta: "Alta", media: "Media", baja: "Baja" };
+
+function etiquetaPrioridad(prioridad) {
+  return `<span class="etiqueta prioridad-${prioridad}">${escapar(PRIORIDADES[prioridad] || prioridad)}</span>`;
+}
+
+function opcionesPrioridad(seleccionada = "media") {
+  return Object.entries(PRIORIDADES)
+    .map(([v, t]) => `<option value="${v}" ${v === seleccionada ? "selected" : ""}>${t}</option>`).join("");
+}

@@ -6,7 +6,7 @@ from ..acceso.deps import usuario_actual
 from ..proyectos.deps import proyecto_autorizado
 from . import service
 from .deps import tarea_autorizada
-from .schemas import ResponsableIn, TareaIn
+from .schemas import PlanificacionIn, ResponsableIn, TareaIn
 
 router = APIRouter(prefix="/api", tags=["tareas"])
 
@@ -14,8 +14,8 @@ router = APIRouter(prefix="/api", tags=["tareas"])
 @router.post("/proyectos/{proyecto_id}/tareas", status_code=201)
 def crear_tarea(data: TareaIn, proyecto: dict = Depends(proyecto_autorizado),
                 u: dict = Depends(usuario_actual), db=Depends(get_db)):
-    return service.crear(db, proyecto, u["id"], data.nombre, data.descripcion,
-                         data.resultado_esperado, data.responsable_id)
+    return service.crear(db, proyecto, u["id"], data.nombre, data.descripcion, data.resultado_esperado,
+                         data.responsable_id, data.fecha_limite, data.prioridad)
 
 
 @router.get("/tareas/{tarea_id}")
@@ -27,6 +27,12 @@ def detalle_tarea(tarea: dict = Depends(tarea_autorizada), u: dict = Depends(usu
 def asignar_responsable(data: ResponsableIn, tarea: dict = Depends(tarea_autorizada),
                         u: dict = Depends(usuario_actual), db=Depends(get_db)):
     return service.asignar(db, tarea, u["id"], data.usuario_id)
+
+
+@router.put("/tareas/{tarea_id}/planificacion")
+def planificar_tarea(data: PlanificacionIn, tarea: dict = Depends(tarea_autorizada),
+                     u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.planificar(db, tarea, u["id"], data.fecha_limite, data.prioridad)
 
 
 @router.get("/tareas/{tarea_id}/historial")

@@ -93,3 +93,30 @@ def test_solo_el_responsable_del_proyecto_asigna(esc):
     url = f"/api/tareas/{t['id']}/responsable"
     assert esc.c.put(url, headers=esc.beto, json={"usuario_id": esc.beto_id}).status_code == 403
     assert esc.c.put(url, headers=esc.carla, json={"usuario_id": esc.carla_id}).status_code == 403
+
+
+# HU-03-003 Fecha límite y prioridad
+def test_fecha_y_prioridad_con_historial(esc):
+    t = crear_tarea(esc, fecha_limite="2026-11-20", prioridad="alta")
+    assert (t["fecha_limite"], t["prioridad"]) == ("2026-11-20", "alta")
+    assert crear_tarea(esc, nombre="Otra")["prioridad"] == "media"  # valor por defecto
+    url = f"/api/tareas/{t['id']}/planificacion"
+    r = esc.c.put(url, headers=esc.ana, json={"fecha_limite": "2026-11-25", "prioridad": "alta"})
+    assert r.status_code == 200 and r.json()["fecha_limite"] == "2026-11-25"
+    esc.c.put(url, headers=esc.ana, json={"fecha_limite": "2026-11-25", "prioridad": "baja"})
+    cambios = [(h["tipo"], h["valor_anterior"], h["valor_nuevo"], h["actor_nombre"])
+               for h in esc.c.get(f"/api/tareas/{t['id']}/historial", headers=esc.ana).json()]
+    assert cambios == [("fecha_limite", "2026-11-20", "2026-11-25", "Ana"), ("prioridad", "alta", "baja", "Ana")]
+
+
+def test_fecha_o_prioridad_invalida_no_guarda(esc):
+    t = crear_tarea(esc, fecha_limite="2026-11-20")
+    url = f"/api/tareas/{t['id']}/planificacion"
+    r = esc.c.put(url, headers=esc.ana, json={"fecha_limite": "2026-02-30", "prioridad": "media"})
+    assert r.status_code == 400 and "fecha_limite" in r.json()["detail"]
+    r = esc.c.put(url, headers=esc.ana, json={"fecha_limite": "2026-11-21", "prioridad": "urgente"})
+    assert r.status_code == 400 and "prioridad" in r.json()["detail"]
+    assert esc.c.put(url, headers=esc.beto, json={"fecha_limite": None, "prioridad": "baja"}).status_code == 403
+    actual = esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()
+    assert (actual["fecha_limite"], actual["prioridad"]) == ("2026-11-20", "media")
+    assert esc.c.get(f"/api/tareas/{t['id']}/historial", headers=esc.ana).json() == []

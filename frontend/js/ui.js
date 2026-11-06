@@ -37,3 +37,16 @@ async function guardar(boton, accion, mensajeOk = "Guardado correctamente") {
 function datosForm(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
+
+// Fechas de la BD (UTC "AAAA-MM-DD HH:MM:SS") en hora local
+function fechaHora(texto) {
+  if (!texto) return "";
+  const d = new Date(texto.replace(" ", "T") + "Z");
+  return isNaN(d) ? texto : d.toLocaleString();
+}
+
+const ESTADOS_TAREA = { pendiente: "Pendiente", en_curso: "En curso", terminada: "Terminada" };
+
+function etiquetaEstado(estado) {
+  return `<span class="etiqueta estado-${estado}">${escapar(ESTADOS_TAREA[estado] || estado)}</span>`;
+}

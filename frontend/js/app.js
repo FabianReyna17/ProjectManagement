@@ -1,4 +1,4 @@
-// Router por hash y vistas del Sprint 1.
+// Router por hash y vistas del Sprint 1 (las de tareas están en tareas.js).
 const app = document.getElementById("app");
 
 const rutas = [
@@ -6,6 +6,8 @@ const rutas = [
   { patron: /^#\/proyectos$/, vista: vistaProyectos },
   { patron: /^#\/proyectos\/nuevo$/, vista: vistaNuevoProyecto },
   { patron: /^#\/proyectos\/(\d+)$/, vista: vistaProyecto },
+  { patron: /^#\/proyectos\/(\d+)\/tareas\/nueva$/, vista: vistaNuevaTarea },
+  { patron: /^#\/tareas\/(\d+)$/, vista: vistaTarea },
   { patron: /^#\/usuarios$/, vista: vistaUsuarios },
   { patron: /^#\/sin-acceso$/, vista: vistaSinAcceso },
 ];
@@ -160,6 +162,13 @@ async function vistaProyecto(id) {
         <dt>Inicio</dt><dd>${p.fecha_inicio}</dd>
         <dt>Fin</dt><dd>${p.fecha_fin}</dd>
       </dl>
+    </div>
+
+    <div class="tarjeta">
+      <div class="encabezado">
+        <h2>Tareas</h2>
+        ${p.soy_responsable ? `<button onclick="location.hash='#/proyectos/${id}/tareas/nueva'">+ Nueva tarea</button>` : ""}
+      </div>
     </div>
 
     <div class="tarjeta">

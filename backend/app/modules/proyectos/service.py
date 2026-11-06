@@ -48,13 +48,14 @@ def listar_participantes(db, proyecto: dict) -> list:
     return repo.listar_participantes(db, proyecto["id"])
 
 
-def _solo_responsable(proyecto: dict, actor_id: int) -> None:
+def exigir_responsable(proyecto: dict, actor_id: int) -> None:
+    """Solo el responsable del proyecto administra participantes y planifica tareas."""
     if proyecto["responsable_id"] != actor_id:
         raise Prohibido()
 
 
 def agregar_participante(db, proyecto: dict, actor_id: int, usuario_id: int) -> None:
-    _solo_responsable(proyecto, actor_id)
+    exigir_responsable(proyecto, actor_id)
     if not acceso.cuenta_activa(db, usuario_id):
         raise DatosInvalidos("La cuenta no existe o está inactiva")
     if repo.es_participante(db, proyecto["id"], usuario_id):
@@ -64,7 +65,7 @@ def agregar_participante(db, proyecto: dict, actor_id: int, usuario_id: int) -> 
 
 
 def retirar_participante(db, proyecto: dict, actor_id: int, usuario_id: int) -> None:
-    _solo_responsable(proyecto, actor_id)
+    exigir_responsable(proyecto, actor_id)
     if usuario_id == proyecto["responsable_id"]:
         raise DatosInvalidos("No se puede retirar al responsable del proyecto")
     with transaccion(db):

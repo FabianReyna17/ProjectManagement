@@ -81,6 +81,12 @@ dd { margin: 0; }
 
 .vacio { color: #666; font-style: italic; }
 
+.volver { display: inline-block; margin-bottom: .5rem; color: #2b6cb0; text-decoration: none; font-size: .9rem; }
+.volver:hover { text-decoration: underline; }
+
+.estado-en_curso { background: #bee3f8; }
+.estado-terminada { background: #c6f6d5; }
+
 #toast {
   position: fixed;
   right: 1rem;

@@ -10,6 +10,7 @@ from .core.errors import ErrorNegocio, codigo_http
 from .db.database import init_db
 from .modules.acceso.router import router as acceso_router
 from .modules.proyectos.router import router as proyectos_router
+from .modules.tareas.router import router as tareas_router
 
 FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
 
@@ -40,6 +41,7 @@ async def error_negocio(request: Request, exc: ErrorNegocio):
 
 app.include_router(acceso_router)
 app.include_router(proyectos_router)
+app.include_router(tareas_router)
 
 # Frontend estático (se monta al final para no tapar /api)
 if os.path.isdir(FRONTEND_DIR):

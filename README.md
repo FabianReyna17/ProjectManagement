@@ -20,10 +20,11 @@ Ver [docs/Arquitectura_Gestion_Proyectos.md](docs/Arquitectura_Gestion_Proyectos
 │   │   ├── db/database.py       # Conexión, transacciones, migraciones y admin inicial
 │   │   └── modules/
 │   │       ├── acceso/          # login, logout, cuentas y funciones
-│   │       └── proyectos/       # proyectos, ficha y participantes
+│   │       ├── proyectos/       # proyectos, ficha y participantes
+│   │       └── tareas/          # tareas de un proyecto
 │   │           # cada módulo: router → service → repository (+ schemas, deps)
 │   ├── migrations/              # Cambios de esquema (Alembic)
-│   ├── tests/                   # API (test_sprint1) y reglas sin HTTP (test_servicios)
+│   ├── tests/                   # API (test_sprint1, test_sprint2) y reglas sin HTTP (test_servicios)
 │   └── requirements.txt
 └── frontend/
     ├── index.html
@@ -31,6 +32,7 @@ Ver [docs/Arquitectura_Gestion_Proyectos.md](docs/Arquitectura_Gestion_Proyectos
     └── js/
         ├── api.js               # Cliente HTTP (token, 401 → login, 403 → sin acceso)
         ├── ui.js                # Aviso de guardado/error común (HU-08-001)
+        ├── tareas.js            # Vistas de tareas
         └── app.js               # Router y vistas
 ```
 
@@ -75,6 +77,12 @@ Cada prueba usa su propia BD temporal.
 | HU-02-001 | `POST /api/proyectos` (Admin/Responsable), valida fechas, estado inicial "planificado" |
 | HU-02-002 | `GET /api/proyectos/{id}` y vista de ficha |
 | HU-08-001 | `guardar()` en `ui.js`: confirma solo si el servidor responde OK; si falla muestra error y no actualiza la vista |
+
+## Cobertura del Sprint 2
+
+| HU | Implementación |
+|---|---|
+| HU-03-001 | `POST /api/proyectos/{id}/tareas` (solo responsable del proyecto), estado inicial "pendiente"; `GET /api/tareas/{id}`; formulario "Nueva tarea" y detalle |
 
 ## Fuera de alcance (siguientes sprints)
 

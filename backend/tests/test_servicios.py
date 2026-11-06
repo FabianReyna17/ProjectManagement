@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 
 from app.core.errors import Conflicto, DatosInvalidos, NoAutenticado, Prohibido
-from app.db.database import get_conn, init_db
+from app.db.database import get_engine, init_db
 from app.modules.acceso import service as acceso
 from app.modules.proyectos import service as proyectos
 
@@ -14,12 +14,10 @@ APP = pathlib.Path(__file__).resolve().parents[1] / "app"
 
 
 @pytest.fixture()
-def db(tmp_path, monkeypatch):
-    monkeypatch.setenv("DB_PATH", str(tmp_path / "test.db"))
+def db():
     init_db()
-    conn = get_conn()
-    yield conn
-    conn.close()
+    with get_engine().connect() as conn:
+        yield conn
 
 
 def funcion(db, nombre):

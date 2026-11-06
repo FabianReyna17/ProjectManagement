@@ -89,6 +89,7 @@ Cada prueba usa su propia BD temporal.
 | HU-03-004 | `GET /api/mis-tareas`: tareas asignadas en proyectos donde aún participo (abiertas primero, por fecha y prioridad); vista "Mis tareas" con proyecto, prioridad, fecha y estado, abre el detalle |
 | HU-04-001 | Estados pendiente → en curso → terminada (volver a pendiente y reabrir permitidos); `PUT /api/tareas/{id}/estado` solo para la persona asignada o el responsable; transición inválida → 400 con el motivo; queda en el historial; botones en el detalle y en "Mis tareas" |
 | HU-04-003 | Tabla `bloqueos` aparte del estado (una tarea puede estar en curso y bloqueada); `POST /api/tareas/{id}/bloqueos` exige motivo, guarda autor y fecha; índice único impide dos bloqueos abiertos (409); marca "⛔ Bloqueada" (icono + texto) en detalle y listas; no se puede terminar una tarea bloqueada |
+| HU-04-004 | `POST /api/tareas/{id}/bloqueos/{bid}/resolver` (solo responsable del proyecto) exige explicación y guarda quién y cuándo; la tarea sigue en su estado de trabajo; resolver uno ya cerrado → 409 sin cambiar su historia; `GET /api/tareas/{id}/bloqueos` y sección "Bloqueos resueltos" |
 
 ## Fuera de alcance (siguientes sprints)
 

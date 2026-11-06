@@ -212,3 +212,44 @@ def test_bloqueo_sin_motivo_duplicado_o_sin_permiso(esc):
     assert r.status_code == 409  # no abre dos bloqueos a la vez
     bloqueos = [h for h in esc.c.get(f"/api/tareas/{t['id']}/historial", headers=esc.ana).json() if h["tipo"] == "bloqueo"]
     assert len(bloqueos) == 1
+
+
+# HU-04-004 Resolver bloqueo
+def bloquear(e, t, motivo="Falta acceso"):
+    r = e.c.post(f"/api/tareas/{t['id']}/bloqueos", headers=e.beto, json={"motivo": motivo})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def test_resolver_bloqueo_conserva_historia(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    esc.c.put(f"/api/tareas/{t['id']}/estado", headers=esc.beto, json={"estado": "en_curso"})
+    b = bloquear(esc, t)
+    url = f"/api/tareas/{t['id']}/bloqueos/{b['id']}/resolver"
+    r = esc.c.post(url, headers=esc.ana, json={"resolucion": "Se dio acceso"})
+    assert r.status_code == 200
+    assert (r.json()["resuelto_por_nombre"], r.json()["resolucion"]) == ("Ana", "Se dio acceso")
+    assert r.json()["resuelto_en"]
+
+    detalle = esc.c.get(f"/api/tareas/{t['id']}", headers=esc.beto).json()
+    assert detalle["bloqueada"] is False and detalle["bloqueo"] is None and detalle["estado"] == "en_curso"
+    assert not esc.c.get("/api/mis-tareas", headers=esc.beto).json()[0]["bloqueada"]
+    [guardado] = esc.c.get(f"/api/tareas/{t['id']}/bloqueos", headers=esc.beto).json()
+    assert (guardado["motivo"], guardado["resolucion"]) == ("Falta acceso", "Se dio acceso")
+    # ya se puede terminar y volver a bloquear si surge otro impedimento
+    assert esc.c.put(f"/api/tareas/{t['id']}/estado", headers=esc.beto, json={"estado": "terminada"}).status_code == 200
+
+
+def test_resolver_bloqueo_cerrado_sin_explicacion_o_sin_permiso(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    b = bloquear(esc, t)
+    url = f"/api/tareas/{t['id']}/bloqueos/{b['id']}/resolver"
+    assert esc.c.post(url, headers=esc.ana, json={"resolucion": ""}).status_code == 400
+    assert esc.c.post(url, headers=esc.beto, json={"resolucion": "Listo"}).status_code == 403
+    assert esc.c.post(f"/api/tareas/{t['id']}/bloqueos/999/resolver", headers=esc.ana,
+                      json={"resolucion": "X"}).status_code == 404
+    assert esc.c.post(url, headers=esc.ana, json={"resolucion": "Listo"}).status_code == 200
+    r = esc.c.post(url, headers=esc.ana, json={"resolucion": "Otra vez"})
+    assert r.status_code == 409
+    [guardado] = esc.c.get(f"/api/tareas/{t['id']}/bloqueos", headers=esc.ana).json()
+    assert guardado["resolucion"] == "Listo"  # no cambia su historia

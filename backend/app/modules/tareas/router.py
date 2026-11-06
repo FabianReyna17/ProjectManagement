@@ -6,7 +6,7 @@ from ..acceso.deps import usuario_actual
 from ..proyectos.deps import proyecto_autorizado
 from . import service
 from .deps import tarea_autorizada
-from .schemas import BloqueoIn, EstadoIn, PlanificacionIn, ResponsableIn, TareaIn
+from .schemas import BloqueoIn, EstadoIn, PlanificacionIn, ResolucionIn, ResponsableIn, TareaIn
 
 router = APIRouter(prefix="/api", tags=["tareas"])
 
@@ -55,6 +55,17 @@ def cambiar_estado(data: EstadoIn, tarea: dict = Depends(tarea_autorizada),
 def registrar_bloqueo(data: BloqueoIn, tarea: dict = Depends(tarea_autorizada),
                       u: dict = Depends(usuario_actual), db=Depends(get_db)):
     return service.registrar_bloqueo(db, tarea, u["id"], data.motivo)
+
+
+@router.get("/tareas/{tarea_id}/bloqueos")
+def bloqueos_de_tarea(tarea: dict = Depends(tarea_autorizada), db=Depends(get_db)):
+    return service.bloqueos(db, tarea)
+
+
+@router.post("/tareas/{tarea_id}/bloqueos/{bloqueo_id}/resolver")
+def resolver_bloqueo(bloqueo_id: int, data: ResolucionIn, tarea: dict = Depends(tarea_autorizada),
+                     u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.resolver_bloqueo(db, tarea, u["id"], bloqueo_id, data.resolucion)
 
 
 @router.get("/tareas/{tarea_id}/historial")

@@ -92,6 +92,9 @@ dd { margin: 0; }
 .estado-terminada { background: #c6f6d5; }
 .etiqueta.bloqueada { background: #fed7d7; color: #9b2c2c; font-weight: 600; }
 .bloqueo-abierto { border-left: 4px solid #c53030; }
+.bloqueo-resuelto { padding: .5rem 0; border-bottom: 1px solid #e5e7eb; }
+.bloqueo-resuelto:last-child { border-bottom: none; }
+.bloqueo-resuelto p { margin: .25rem 0; }
 .meta { color: #666; font-size: .85rem; margin-bottom: 0; }
 
 .aviso-sin-asignar { color: #b7791f; font-weight: 600; }

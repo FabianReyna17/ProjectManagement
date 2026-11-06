@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003).
+"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003, HU-04-004).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -7,7 +7,7 @@ Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
 from datetime import date
 from typing import Optional
 
-from ...core.errors import Conflicto, DatosInvalidos, Prohibido
+from ...core.errors import Conflicto, DatosInvalidos, NoEncontrado, Prohibido
 from ...db.database import transaccion
 from ..acceso import service as acceso
 from ..proyectos import service as proyectos
@@ -153,6 +153,24 @@ def registrar_bloqueo(db, tarea: dict, actor_id: int, motivo: str) -> dict:
     except repo.BloqueoYaAbierto:
         raise Conflicto("La tarea ya tiene un bloqueo abierto")
     return repo.obtener_bloqueo(db, bid)
+
+
+def bloqueos(db, tarea: dict) -> list:
+    return repo.listar_bloqueos(db, tarea["id"])
+
+
+def resolver_bloqueo(db, tarea: dict, actor_id: int, bloqueo_id: int, resolucion: str) -> dict:
+    """HU-04-004: solo el responsable del proyecto; exige explicación. El bloqueo se conserva
+    con motivo y resolución; la tarea sigue en su estado de trabajo. Uno ya resuelto → Conflicto."""
+    _exigir_planificador(tarea, actor_id)
+    bloqueo = repo.obtener_bloqueo(db, bloqueo_id)
+    if not bloqueo or bloqueo["tarea_id"] != tarea["id"]:
+        raise NoEncontrado("El bloqueo no existe en esta tarea")
+    with transaccion(db):
+        if not repo.resolver_bloqueo(db, bloqueo_id, resolucion, actor_id):
+            raise Conflicto("El bloqueo ya estaba resuelto")
+        repo.registrar_cambio(db, tarea["id"], "resolucion_bloqueo", bloqueo["motivo"], resolucion, actor_id)
+    return repo.obtener_bloqueo(db, bloqueo_id)
 
 
 def historial(db, tarea: dict) -> list:

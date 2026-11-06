@@ -99,6 +99,20 @@ def bloqueo_abierto(db, tarea_id: int) -> Optional[dict]:
     return uno(db, f"{SELECT_BLOQUEO} WHERE b.tarea_id = :t AND b.resuelto_en IS NULL", t=tarea_id)
 
 
+def listar_bloqueos(db, tarea_id: int) -> list:
+    return varios(db, f"{SELECT_BLOQUEO} WHERE b.tarea_id = :t ORDER BY b.id", t=tarea_id)
+
+
+def resolver_bloqueo(db, bloqueo_id: int, resolucion: str, actor_id: int) -> bool:
+    """Cierra el bloqueo solo si sigue abierto (False si ya estaba resuelto)."""
+    cur = db.execute(
+        text("""UPDATE bloqueos SET resolucion = :r, resuelto_por = :a, resuelto_en = CURRENT_TIMESTAMP
+                WHERE id = :id AND resuelto_en IS NULL"""),
+        {"r": resolucion, "a": actor_id, "id": bloqueo_id},
+    )
+    return cur.rowcount > 0
+
+
 # --- Historial ---
 
 def registrar_cambio(db, tarea_id: int, tipo: str, anterior, nuevo, actor_id: int) -> None:

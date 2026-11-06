@@ -35,3 +35,7 @@ class EstadoIn(Base):
 
 class BloqueoIn(Base):
     motivo: str = Field(min_length=1, max_length=1000)
+
+
+class ResolucionIn(Base):
+    resolucion: str = Field(min_length=1, max_length=1000)

@@ -84,7 +84,11 @@ async function vistaNuevaTarea(pid) {
 // Detalle de una tarea
 async function vistaTarea(id) {
   const t = await API.get(`/api/tareas/${id}`);
-  const participantes = t.puedo_planificar ? await API.get(`/api/proyectos/${t.proyecto_id}/participantes`) : [];
+  const [participantes, bloqueos] = await Promise.all([
+    t.puedo_planificar ? API.get(`/api/proyectos/${t.proyecto_id}/participantes`) : [],
+    API.get(`/api/tareas/${id}/bloqueos`),
+  ]);
+  const resueltos = bloqueos.filter((b) => b.resuelto_en).reverse();
 
   app.innerHTML = `
     <div class="tarjeta">
@@ -121,6 +125,23 @@ async function vistaTarea(id) {
       <h2>⛔ Bloqueo abierto</h2>
       <p>${escapar(t.bloqueo.motivo)}</p>
       <p class="meta">Reportado por ${escapar(t.bloqueo.abierto_por_nombre)} · ${fechaHora(t.bloqueo.abierto_en)}</p>
+      ${t.puedo_planificar ? `
+        <form id="f-resolver" style="margin-top:1rem">
+          <label>¿Cómo se resolvió? <textarea name="resolucion" required rows="2" maxlength="1000"></textarea></label>
+          <div><button>Resolver bloqueo</button></div>
+        </form>` : ""}
+    </div>` : ""}
+
+    ${resueltos.length ? `
+    <div class="tarjeta">
+      <h2>Bloqueos resueltos</h2>
+      ${resueltos.map((b) => `
+        <div class="bloqueo-resuelto">
+          <p><strong>Motivo:</strong> ${escapar(b.motivo)}</p>
+          <p class="meta">Reportado por ${escapar(b.abierto_por_nombre)} · ${fechaHora(b.abierto_en)}</p>
+          <p><strong>Resolución:</strong> ${escapar(b.resolucion)}</p>
+          <p class="meta">Resuelto por ${escapar(b.resuelto_por_nombre)} · ${fechaHora(b.resuelto_en)}</p>
+        </div>`).join("")}
     </div>` : ""}
 
     ${t.puedo_planificar ? `
@@ -152,6 +173,15 @@ async function vistaTarea(id) {
     e.preventDefault();
     const ok = await guardar(fBloq.querySelector("button"),
       () => API.post(`/api/tareas/${id}/bloqueos`, datosForm(fBloq)), "Bloqueo registrado");
+    if (ok) vistaTarea(id);
+  });
+
+  // HU-04-004 Resolver bloqueo
+  const fRes = document.getElementById("f-resolver");
+  fRes?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const ok = await guardar(fRes.querySelector("button"),
+      () => API.post(`/api/tareas/${id}/bloqueos/${t.bloqueo.id}/resolver`, datosForm(fRes)), "Bloqueo resuelto");
     if (ok) vistaTarea(id);
   });
 

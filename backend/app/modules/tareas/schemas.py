@@ -31,3 +31,7 @@ class PlanificacionIn(Base):
 
 class EstadoIn(Base):
     estado: Estado
+
+
+class BloqueoIn(Base):
+    motivo: str = Field(min_length=1, max_length=1000)

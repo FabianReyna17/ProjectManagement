@@ -6,7 +6,7 @@ from ..acceso.deps import usuario_actual
 from ..proyectos.deps import proyecto_autorizado
 from . import service
 from .deps import tarea_autorizada
-from .schemas import EstadoIn, PlanificacionIn, ResponsableIn, TareaIn
+from .schemas import BloqueoIn, EstadoIn, PlanificacionIn, ResponsableIn, TareaIn
 
 router = APIRouter(prefix="/api", tags=["tareas"])
 
@@ -29,8 +29,8 @@ def mis_tareas(u: dict = Depends(usuario_actual), db=Depends(get_db)):
 
 
 @router.get("/tareas/{tarea_id}")
-def detalle_tarea(tarea: dict = Depends(tarea_autorizada), u: dict = Depends(usuario_actual)):
-    return service.detalle(tarea, u["id"])
+def detalle_tarea(tarea: dict = Depends(tarea_autorizada), u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.con_bloqueo(db, tarea, u["id"])
 
 
 @router.put("/tareas/{tarea_id}/responsable")
@@ -49,6 +49,12 @@ def planificar_tarea(data: PlanificacionIn, tarea: dict = Depends(tarea_autoriza
 def cambiar_estado(data: EstadoIn, tarea: dict = Depends(tarea_autorizada),
                    u: dict = Depends(usuario_actual), db=Depends(get_db)):
     return service.cambiar_estado(db, tarea, u["id"], data.estado)
+
+
+@router.post("/tareas/{tarea_id}/bloqueos", status_code=201)
+def registrar_bloqueo(data: BloqueoIn, tarea: dict = Depends(tarea_autorizada),
+                      u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.registrar_bloqueo(db, tarea, u["id"], data.motivo)
 
 
 @router.get("/tareas/{tarea_id}/historial")

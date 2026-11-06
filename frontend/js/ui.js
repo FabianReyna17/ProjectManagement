@@ -47,8 +47,9 @@ function fechaHora(texto) {
 
 const ESTADOS_TAREA = { pendiente: "Pendiente", en_curso: "En curso", terminada: "Terminada" };
 
-function etiquetaEstado(estado) {
-  return `<span class="etiqueta estado-${estado}">${escapar(ESTADOS_TAREA[estado] || estado)}</span>`;
+function etiquetaEstado(estado, bloqueada = false) {
+  return `<span class="etiqueta estado-${estado}">${escapar(ESTADOS_TAREA[estado] || estado)}</span>` +
+    (bloqueada ? ` <span class="etiqueta bloqueada">⛔ Bloqueada</span>` : "");
 }
 
 const PRIORIDADES = { alta: "Alta", media: "Media", baja: "Baja" };

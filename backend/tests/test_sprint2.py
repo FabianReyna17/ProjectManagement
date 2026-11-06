@@ -182,3 +182,33 @@ def test_transicion_invalida_o_sin_permiso_no_cambia(esc):
     assert r.status_code == 403 and "asignada" in r.json()["detail"]
     assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.beto).json()["transiciones"] == []
     assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()["estado"] == "pendiente"
+
+
+# HU-04-003 Registrar bloqueo
+def test_registrar_bloqueo_visible_sin_cambiar_estado(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    esc.c.put(f"/api/tareas/{t['id']}/estado", headers=esc.beto, json={"estado": "en_curso"})
+    r = esc.c.post(f"/api/tareas/{t['id']}/bloqueos", headers=esc.beto, json={"motivo": "Falta acceso al servidor"})
+    assert r.status_code == 201
+    b = r.json()
+    assert b["abierto_por_nombre"] == "Beto" and b["abierto_en"] and b["resuelto_en"] is None
+
+    detalle = esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()
+    assert detalle["estado"] == "en_curso" and detalle["bloqueada"] is True  # no reemplaza el estado
+    assert detalle["bloqueo"]["motivo"] == "Falta acceso al servidor"
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.ana).json()[0]["bloqueada"]
+    assert esc.c.get("/api/mis-tareas", headers=esc.beto).json()[0]["bloqueada"]
+    # no se termina con un bloqueo abierto
+    assert esc.c.put(f"/api/tareas/{t['id']}/estado", headers=esc.beto, json={"estado": "terminada"}).status_code == 400
+
+
+def test_bloqueo_sin_motivo_duplicado_o_sin_permiso(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    url = f"/api/tareas/{t['id']}/bloqueos"
+    assert esc.c.post(url, headers=esc.beto, json={"motivo": "   "}).status_code == 400
+    assert esc.c.post(url, headers=esc.carla, json={"motivo": "X"}).status_code == 403
+    assert esc.c.post(url, headers=esc.beto, json={"motivo": "Esperando datos"}).status_code == 201
+    r = esc.c.post(url, headers=esc.beto, json={"motivo": "Esperando datos"})
+    assert r.status_code == 409  # no abre dos bloqueos a la vez
+    bloqueos = [h for h in esc.c.get(f"/api/tareas/{t['id']}/historial", headers=esc.ana).json() if h["tipo"] == "bloqueo"]
+    assert len(bloqueos) == 1

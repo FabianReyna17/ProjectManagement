@@ -1,9 +1,17 @@
-"""Acceso a datos de tareas y su historial. Solo SQL: sin reglas ni commits."""
+"""Acceso a datos de tareas, bloqueos e historial. Solo SQL: sin reglas ni commits."""
 from typing import Optional
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from ...db.database import uno, varios
+
+
+class BloqueoYaAbierto(Exception):
+    pass
+
+
+BLOQUEADA = "EXISTS (SELECT 1 FROM bloqueos b WHERE b.tarea_id = t.id AND b.resuelto_en IS NULL)"
 
 
 def insertar(db, proyecto_id: int, nombre: str, descripcion: str, resultado_esperado: Optional[str],
@@ -18,8 +26,8 @@ def insertar(db, proyecto_id: int, nombre: str, descripcion: str, resultado_espe
 
 
 def obtener(db, tarea_id: int) -> Optional[dict]:
-    return uno(db, """SELECT t.*, p.nombre AS proyecto_nombre, c.nombre AS creado_por_nombre,
-                              r.nombre AS responsable_nombre
+    return uno(db, f"""SELECT t.*, p.nombre AS proyecto_nombre, c.nombre AS creado_por_nombre,
+                               r.nombre AS responsable_nombre, {BLOQUEADA} AS bloqueada
                        FROM tareas t
                        JOIN proyectos p     ON p.id = t.proyecto_id
                        JOIN usuarios c      ON c.id = t.creado_por
@@ -28,7 +36,7 @@ def obtener(db, tarea_id: int) -> Optional[dict]:
 
 
 COLUMNAS_LISTA = """t.id, t.proyecto_id, t.nombre, t.estado, t.prioridad, t.fecha_limite,
-                     t.responsable_id, r.nombre AS responsable_nombre"""
+                     t.responsable_id, r.nombre AS responsable_nombre, """ + BLOQUEADA + " AS bloqueada"
 
 
 def listar_de_proyecto(db, proyecto_id: int) -> list:
@@ -63,6 +71,32 @@ def actualizar_estado(db, tarea_id: int, estado: str) -> None:
 def actualizar_plan(db, tarea_id: int, fecha_limite: Optional[str], prioridad: str) -> None:
     db.execute(text("UPDATE tareas SET fecha_limite = :f, prioridad = :p WHERE id = :id"),
                {"f": fecha_limite, "p": prioridad, "id": tarea_id})
+
+
+# --- Bloqueos ---
+
+def insertar_bloqueo(db, tarea_id: int, motivo: str, actor_id: int) -> int:
+    try:
+        return db.execute(
+            text("INSERT INTO bloqueos (tarea_id, motivo, abierto_por) VALUES (:t, :m, :a)"),
+            {"t": tarea_id, "m": motivo, "a": actor_id},
+        ).lastrowid
+    except IntegrityError as e:  # índice único: ya hay uno abierto
+        raise BloqueoYaAbierto() from e
+
+
+SELECT_BLOQUEO = """SELECT b.*, a.nombre AS abierto_por_nombre, r.nombre AS resuelto_por_nombre
+                    FROM bloqueos b
+                    JOIN usuarios a      ON a.id = b.abierto_por
+                    LEFT JOIN usuarios r ON r.id = b.resuelto_por"""
+
+
+def obtener_bloqueo(db, bloqueo_id: int) -> Optional[dict]:
+    return uno(db, f"{SELECT_BLOQUEO} WHERE b.id = :id", id=bloqueo_id)
+
+
+def bloqueo_abierto(db, tarea_id: int) -> Optional[dict]:
+    return uno(db, f"{SELECT_BLOQUEO} WHERE b.tarea_id = :t AND b.resuelto_en IS NULL", t=tarea_id)
 
 
 # --- Historial ---

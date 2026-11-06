@@ -24,7 +24,7 @@ function tablaTareas(tareas, { conProyecto = false, conAcciones = false, vacio =
             <td>${conProyecto ? escapar(t.proyecto_nombre) : (t.responsable_nombre ? escapar(t.responsable_nombre) : SIN_ASIGNAR)}</td>
             <td>${etiquetaPrioridad(t.prioridad)}</td>
             <td>${t.fecha_limite || "—"}</td>
-            <td>${etiquetaEstado(t.estado)}</td>
+            <td>${etiquetaEstado(t.estado, t.bloqueada)}</td>
             ${conAcciones ? `<td class="acciones">${botonesEstado(t.id, t.estado)}</td>` : ""}
           </tr>`).join("")}
       </tbody>
@@ -91,7 +91,7 @@ async function vistaTarea(id) {
       <a class="volver" href="#/proyectos/${t.proyecto_id}">← ${escapar(t.proyecto_nombre)}</a>
       <div class="encabezado">
         <h1>${escapar(t.nombre)}</h1>
-        ${etiquetaEstado(t.estado)}
+        <div>${etiquetaEstado(t.estado, t.bloqueada)}</div>
       </div>
       <dl>
         <dt>Descripción</dt><dd>${escapar(t.descripcion)}</dd>
@@ -102,8 +102,26 @@ async function vistaTarea(id) {
         <dt>Fecha límite</dt><dd>${t.fecha_limite || `<span class="vacio">Sin fecha</span>`}</dd>
         <dt>Creada por</dt><dd>${escapar(t.creado_por_nombre)} · ${fechaHora(t.creado_en)}</dd>
       </dl>
-      ${t.transiciones.length ? `<div class="acciones barra-acciones">${botonesEstado(t.id, t.estado, t.transiciones)}</div>` : ""}
+      ${t.transiciones.length || t.puedo_bloquear ? `
+        <div class="acciones barra-acciones">
+          ${botonesEstado(t.id, t.estado, t.transiciones)}
+          ${t.puedo_bloquear ? `<button class="peligro chico" id="btn-bloquear">⛔ Reportar bloqueo</button>` : ""}
+        </div>` : ""}
+      <form id="f-bloqueo" class="oculto" style="margin-top:1rem">
+        <label>Motivo del bloqueo <textarea name="motivo" required rows="2" maxlength="1000"></textarea></label>
+        <div>
+          <button class="peligro">Registrar bloqueo</button>
+          <button type="button" class="secundario" id="btn-cancelar-bloqueo">Cancelar</button>
+        </div>
+      </form>
     </div>
+
+    ${t.bloqueo ? `
+    <div class="tarjeta bloqueo-abierto">
+      <h2>⛔ Bloqueo abierto</h2>
+      <p>${escapar(t.bloqueo.motivo)}</p>
+      <p class="meta">Reportado por ${escapar(t.bloqueo.abierto_por_nombre)} · ${fechaHora(t.bloqueo.abierto_en)}</p>
+    </div>` : ""}
 
     ${t.puedo_planificar ? `
     <div class="tarjeta">
@@ -122,6 +140,20 @@ async function vistaTarea(id) {
     </div>` : ""}`;
 
   conectarBotonesEstado(app, () => vistaTarea(id));  // HU-04-001
+
+  // HU-04-003 Registrar bloqueo
+  const fBloq = document.getElementById("f-bloqueo");
+  document.getElementById("btn-bloquear")?.addEventListener("click", () => {
+    fBloq.classList.remove("oculto");
+    fBloq.querySelector("textarea").focus();
+  });
+  document.getElementById("btn-cancelar-bloqueo").addEventListener("click", () => fBloq.classList.add("oculto"));
+  fBloq.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const ok = await guardar(fBloq.querySelector("button"),
+      () => API.post(`/api/tareas/${id}/bloqueos`, datosForm(fBloq)), "Bloqueo registrado");
+    if (ok) vistaTarea(id);
+  });
 
   // HU-03-002 Asignar responsable
   const fResp = document.getElementById("f-responsable");

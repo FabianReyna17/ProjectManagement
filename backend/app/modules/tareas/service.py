@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001).
+"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -7,7 +7,7 @@ Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
 from datetime import date
 from typing import Optional
 
-from ...core.errors import DatosInvalidos, Prohibido
+from ...core.errors import Conflicto, DatosInvalidos, Prohibido
 from ...db.database import transaccion
 from ..acceso import service as acceso
 from ..proyectos import service as proyectos
@@ -15,6 +15,7 @@ from . import repository as repo
 
 MSG_RESPONSABLE = "El responsable debe ser una cuenta activa con acceso al proyecto"
 MSG_ESTADO_PERMISO = "Solo la persona asignada o el responsable del proyecto pueden cambiar el estado"
+MSG_BLOQUEO_PERMISO = "Solo la persona asignada o el responsable del proyecto pueden reportar un bloqueo"
 
 NOMBRE_ESTADO = {"pendiente": "Pendiente", "en_curso": "En curso", "terminada": "Terminada"}
 # Transiciones permitidas (HU-04-001). Terminar requiere haber iniciado; una terminada se puede reabrir.
@@ -69,19 +70,25 @@ def _puede_cambiar_estado(tarea: dict, usuario_id: int) -> bool:
 def detalle(tarea: dict, usuario_id: int) -> dict:
     puede = _puede_cambiar_estado(tarea, usuario_id)
     return {**tarea,
+            "bloqueada": bool(tarea["bloqueada"]),
+            "puedo_bloquear": puede and not tarea["bloqueada"] and tarea["estado"] != "terminada",
             "puedo_planificar": tarea["proyecto_responsable_id"] == usuario_id,
             "soy_asignado": tarea["responsable_id"] == usuario_id,
             "transiciones": sorted(TRANSICIONES[tarea["estado"]]) if puede else []}
 
 
+def _lista(tareas: list) -> list:
+    return [{**t, "bloqueada": bool(t["bloqueada"])} for t in tareas]
+
+
 def listar_de_proyecto(db, proyecto: dict) -> list:
     """HU-03-005: tareas del proyecto (ya autorizado); responsable_id null = sin asignar."""
-    return repo.listar_de_proyecto(db, proyecto["id"])
+    return _lista(repo.listar_de_proyecto(db, proyecto["id"]))
 
 
 def mis_tareas(db, usuario_id: int) -> list:
     """HU-03-004: al reasignar la tarea o perder acceso al proyecto deja de aparecer."""
-    return repo.listar_asignadas(db, usuario_id)
+    return _lista(repo.listar_asignadas(db, usuario_id))
 
 
 def asignar(db, tarea: dict, actor_id: int, usuario_id: int) -> dict:
@@ -120,10 +127,32 @@ def cambiar_estado(db, tarea: dict, actor_id: int, estado: str) -> dict:
     if estado != actual:
         if estado not in TRANSICIONES[actual]:
             raise DatosInvalidos(f"No se puede pasar de «{NOMBRE_ESTADO[actual]}» a «{NOMBRE_ESTADO[estado]}»")
+        if estado == "terminada" and tarea["bloqueada"]:
+            raise DatosInvalidos("La tarea tiene un bloqueo abierto: resuélvelo antes de terminarla")
         with transaccion(db):
             repo.actualizar_estado(db, tarea["id"], estado)
             repo.registrar_cambio(db, tarea["id"], "estado", actual, estado, actor_id)
     return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
+
+
+def con_bloqueo(db, tarea: dict, usuario_id: int) -> dict:
+    """Detalle de la tarea con su bloqueo abierto (o None)."""
+    return {**detalle(tarea, usuario_id), "bloqueo": repo.bloqueo_abierto(db, tarea["id"])}
+
+
+def registrar_bloqueo(db, tarea: dict, actor_id: int, motivo: str) -> dict:
+    """HU-04-003: abre un bloqueo con motivo, autor y fecha sin cambiar el estado de trabajo."""
+    if not _puede_cambiar_estado(tarea, actor_id):
+        raise Prohibido(MSG_BLOQUEO_PERMISO)
+    if tarea["estado"] == "terminada":
+        raise DatosInvalidos("No se puede bloquear una tarea terminada")
+    try:
+        with transaccion(db):
+            bid = repo.insertar_bloqueo(db, tarea["id"], motivo, actor_id)
+            repo.registrar_cambio(db, tarea["id"], "bloqueo", None, motivo, actor_id)
+    except repo.BloqueoYaAbierto:
+        raise Conflicto("La tarea ya tiene un bloqueo abierto")
+    return repo.obtener_bloqueo(db, bid)
 
 
 def historial(db, tarea: dict) -> list:

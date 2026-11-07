@@ -1,6 +1,7 @@
 """Endpoints de autenticación y cuentas. Solo validan la entrada y llaman al servicio."""
 from fastapi import APIRouter, Depends
 
+from ...core.cabeceras import clave_idempotencia
 from ...db.database import get_db
 from . import service
 from .deps import requiere_funcion, usuario_actual
@@ -40,5 +41,6 @@ def listar_usuarios(_=Depends(requiere_funcion("Admin", "Responsable")), db=Depe
 
 
 @router.post("/usuarios", status_code=201, tags=["usuarios"])
-def registrar_usuario(data: UsuarioIn, _=Depends(requiere_funcion("Admin")), db=Depends(get_db)):
-    return service.registrar_usuario(db, data.usuario, data.nombre, data.password, data.funcion_id)
+def registrar_usuario(data: UsuarioIn, u: dict = Depends(requiere_funcion("Admin")),
+                      clave=Depends(clave_idempotencia), db=Depends(get_db)):
+    return service.registrar_usuario(db, data.usuario, data.nombre, data.password, data.funcion_id, u["id"], clave)

@@ -109,3 +109,37 @@ def test_crear_una_vez_si_falla_no_guarda_la_clave(db):
     assert crear_una_vez(db, ana, "k", "prueba", lambda: 8) == 7   # reintento: devuelve el primero
     with pytest.raises(Conflicto):
         crear_una_vez(db, ana, "k", "otra", lambda: 9)            # misma clave, otra acción
+
+
+def test_freno_de_intentos_crece_y_se_olvida():
+    from app.core.intentos import LIBRES, OLVIDO, Intentos
+    ahora = [1000.0]
+    frenos = Intentos(reloj=lambda: ahora[0])
+    for _ in range(LIBRES - 1):
+        frenos.fallo("ana")
+    assert frenos.espera("ana") == 0
+    frenos.fallo("ana")
+    assert frenos.espera("ana") == 2
+    frenos.fallo("ana")
+    assert frenos.espera("ana") == 4            # se duplica
+    assert frenos.espera("otra") == 0           # cada identificador lleva su cuenta
+    ahora[0] += 4
+    assert frenos.espera("ana") == 0
+    frenos.exito("ana")
+    frenos.fallo("ana")
+    assert frenos.espera("ana") == 0            # un inicio correcto limpia el contador
+    for _ in range(LIBRES):
+        frenos.fallo("beto")
+    ahora[0] += OLVIDO + 1
+    assert frenos.espera("beto") == 0           # sin fallos recientes se olvida
+
+
+def test_sesion_vencida_se_borra(db):
+    acceso.registrar_usuario(db, "ana", "Ana", "clave123", funcion(db, "Responsable"))
+    token = acceso.iniciar_sesion(db, "ana", "clave123")["token"]
+    assert acceso.sesion_vigente(db, token)["usuario"] == "ana"
+    db.execute(text("UPDATE sesiones SET ultimo_uso = '2000-01-01 00:00:00'"))
+    db.commit()
+    with pytest.raises(NoAutenticado, match="expiró"):
+        acceso.sesion_vigente(db, token)
+    assert db.execute(text("SELECT COUNT(*) FROM sesiones")).scalar() == 0

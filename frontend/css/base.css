@@ -1,0 +1,103 @@
+/* ==========================================================================
+   Base: reinicio, tipografía, controles nativos y utilidades.
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { color-scheme: light dark; -webkit-text-size-adjust: 100%; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--fuente);
+  font-size: var(--t-base);
+  line-height: var(--lh-normal);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; line-height: var(--lh-ajustado); font-weight: var(--peso-fuerte); }
+h1 { font-size: var(--t-xl); letter-spacing: -.01em; }
+h2 { font-size: var(--t-md); }
+p { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+
+a { color: var(--acento); text-decoration: none; }
+a:hover { color: var(--acento-hover); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Foco visible y consistente en todo lo interactivo */
+:focus { outline: none; }
+:focus-visible { outline: none; box-shadow: var(--foco); border-radius: var(--r-1); }
+h1:focus, [tabindex="-1"]:focus { box-shadow: none; }
+
+kbd, .atajo-tecla {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 var(--e-1);
+  border: 1px solid var(--borde-fuerte);
+  border-bottom-width: 2px;
+  border-radius: var(--r-1);
+  background: var(--superficie);
+  color: var(--texto-2);
+  font: var(--peso-medio) var(--t-xs) / 18px var(--fuente);
+  text-align: center;
+  white-space: nowrap;
+}
+
+time, .num { font-variant-numeric: tabular-nums; }
+
+.icono {
+  width: var(--icono);
+  height: var(--icono);
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -3px;
+}
+.icono .relleno { fill: currentColor; }
+.icono-grande { width: 32px; height: 32px; stroke-width: 1.5; color: var(--texto-3); }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* Controles de formulario */
+input, select, textarea {
+  width: 100%;
+  min-height: var(--alto-control);
+  padding: 6px var(--e-3);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: var(--r-1);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  transition: border-color var(--d-rapida) var(--curva), box-shadow var(--d-rapida) var(--curva);
+}
+textarea { resize: vertical; line-height: var(--lh-normal); }
+input:hover, select:hover, textarea:hover { border-color: var(--texto-3); }
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px var(--acento-suave);
+  border-radius: var(--r-1);
+}
+[aria-invalid="true"] { border-color: var(--peligro); }
+[aria-invalid="true"]:focus-visible { border-color: var(--peligro); box-shadow: 0 0 0 3px var(--peligro-suave); }
+
+input[type="date"] { font-variant-numeric: tabular-nums; }
+input[type="search"]::-webkit-search-cancel-button { cursor: pointer; }
+
+/* Utilidades */
+.solo-lector {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
+[hidden] { display: none !important; }
+.tenue { color: var(--texto-2); }
+.meta { color: var(--texto-2); font-size: var(--t-sm); }
+.texto-largo { white-space: pre-line; overflow-wrap: anywhere; max-width: 72ch; }
+.opcional { color: var(--texto-2); font-weight: var(--peso-normal); font-size: var(--t-xs); }

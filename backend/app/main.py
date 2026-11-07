@@ -39,13 +39,25 @@ async def error_negocio(request: Request, exc: ErrorNegocio):
     return JSONResponse(status_code=codigo_http(exc), content={"detail": exc.mensaje})
 
 
+# La interfaz no usa scripts ni estilos en línea, por eso la política puede ser estricta.
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+       "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+DOCS = ("/docs", "/redoc", "/openapi.json")  # Swagger carga recursos externos
+
+
 @app.middleware("http")
-async def sin_cache_frontend(request: Request, call_next):
+async def cabeceras_http(request: Request, call_next):
     """El navegador revalida HTML/JS/CSS en cada carga (ETag): tras actualizar el código
-    nunca se mezcla un index.html nuevo con un app.js viejo."""
+    nunca se mezcla un index.html nuevo con un app.js viejo. Además, cabeceras de seguridad."""
     respuesta = await call_next(request)
-    if not request.url.path.startswith("/api"):
+    ruta = request.url.path
+    respuesta.headers["X-Content-Type-Options"] = "nosniff"
+    respuesta.headers["Referrer-Policy"] = "same-origin"
+    if not ruta.startswith("/api"):
         respuesta.headers["Cache-Control"] = "no-cache"
+        if not ruta.startswith(DOCS):
+            respuesta.headers["Content-Security-Policy"] = CSP
+            respuesta.headers["X-Frame-Options"] = "DENY"
     return respuesta
 
 

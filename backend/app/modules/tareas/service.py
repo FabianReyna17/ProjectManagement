@@ -71,6 +71,11 @@ def _puede_cambiar_estado(tarea: dict, usuario_id: int) -> bool:
     return usuario_id in (tarea["responsable_id"], tarea["proyecto_responsable_id"])
 
 
+def _transiciones(tarea: dict) -> list:
+    """Las que el servidor aceptaría ahora: con un bloqueo abierto no se ofrece terminar."""
+    return sorted(e for e in TRANSICIONES[tarea["estado"]] if not (e == "terminada" and tarea["bloqueada"]))
+
+
 def detalle(tarea: dict, usuario_id: int) -> dict:
     puede = _puede_cambiar_estado(tarea, usuario_id)
     return {**tarea,
@@ -78,7 +83,7 @@ def detalle(tarea: dict, usuario_id: int) -> dict:
             "puedo_bloquear": puede and not tarea["bloqueada"] and tarea["estado"] != "terminada",
             "puedo_planificar": tarea["proyecto_responsable_id"] == usuario_id,
             "soy_asignado": tarea["responsable_id"] == usuario_id,
-            "transiciones": sorted(TRANSICIONES[tarea["estado"]]) if puede else []}
+            "transiciones": _transiciones(tarea) if puede else []}
 
 
 def _lista(tareas: list) -> list:

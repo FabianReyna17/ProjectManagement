@@ -1,33 +1,31 @@
-// Vistas de tareas (Sprint 2).
+// Vistas de tareas (Sprint 2). Cada vista devuelve { titulo, html, montar, ... } y el router la pinta.
 
-function opcionesPersonas(personas, seleccionado, vacio) {
-  return (vacio ? `<option value="">${vacio}</option>` : "") +
-    personas.map((x) => `<option value="${x.id}" ${x.id === seleccionado ? "selected" : ""}>${escapar(x.nombre)}</option>`).join("");
+function opcionesPersonas(personas, seleccionado, vacioTexto) {
+  return (vacioTexto ? `<option value="">${escapar(vacioTexto)}</option>` : "") +
+    personas.map((x) => `<option value="${Number(x.id)}" ${x.id === seleccionado ? "selected" : ""}>${escapar(x.nombre)}</option>`).join("");
 }
 
-const SIN_ASIGNAR = `<span class="aviso-sin-asignar">⚠ Sin asignar</span>`;
-
 /** Tabla de tareas; cada fila abre el detalle. Reutilizada por el proyecto y "Mis tareas". */
-function tablaTareas(tareas, { conProyecto = false, conAcciones = false, vacio = "No hay tareas." } = {}) {
-  if (tareas.length === 0) return `<p class="vacio">${vacio}</p>`;
+function tablaTareas(tareas, { id = "tabla-tareas", conProyecto = false, conAcciones = false, vacioHtml = "" } = {}) {
+  if (tareas.length === 0) return vacioHtml || vacio("No hay tareas.");
   return `
-    <div class="tabla-scroll">
-    <table class="tabla-tareas">
+    <div class="tabla-marco">
+    <table class="tabla tabla-tarjetas" id="${id}">
       <thead><tr>
-        <th>Tarea</th>${conProyecto ? "<th>Proyecto</th>" : "<th>Responsable</th>"}
-        <th>Prioridad</th><th>Fecha límite</th><th>Estado</th>${conAcciones ? "<th></th>" : ""}
+        ${th("Tarea", { clase: "col-principal" })}${conProyecto ? th("Proyecto") : th("Responsable")}
+        ${th("Prioridad")}${th("Fecha límite")}${th("Estado")}${conAcciones ? th("Acciones", { ordenable: false }) : ""}
       </tr></thead>
       <tbody>
         ${tareas.map((t) => `
-          <tr class="clic" onclick="location.hash='#/tareas/${t.id}'">
-            <td data-label="Tarea">${escapar(t.nombre)}</td>
+          <tr data-href="#/tareas/${Number(t.id)}" class="${t.bloqueada ? "fila-bloqueada" : ""}">
+            <td data-label="Tarea" class="celda-principal"><a href="#/tareas/${Number(t.id)}">${escapar(t.nombre)}</a></td>
             ${conProyecto
               ? `<td data-label="Proyecto">${escapar(t.proyecto_nombre)}</td>`
-              : `<td data-label="Responsable">${t.responsable_nombre ? escapar(t.responsable_nombre) : SIN_ASIGNAR}</td>`}
-            <td data-label="Prioridad">${etiquetaPrioridad(t.prioridad)}</td>
-            <td data-label="Fecha límite">${t.fecha_limite || "—"}</td>
-            <td data-label="Estado">${etiquetaEstado(t.estado, t.bloqueada)}</td>
-            ${conAcciones ? `<td class="acciones">${botonesEstado(t.id, t.estado)}</td>` : ""}
+              : `<td data-label="Responsable" data-orden="${escapar(t.responsable_nombre || "")}">${t.responsable_nombre ? persona(t.responsable_nombre) : sinAsignar()}</td>`}
+            <td data-label="Prioridad" data-orden="${ORDEN_PRIORIDAD[t.prioridad] || 9}">${etiquetaPrioridad(t.prioridad)}</td>
+            <td data-label="Fecha límite" data-orden="${escapar(t.fecha_limite || "")}" class="num">${fecha(t.fecha_limite, "Sin fecha")}</td>
+            <td data-label="Estado" data-orden="${t.bloqueada ? 0 : ORDEN_ESTADO[t.estado] || 9}">${etiquetaEstado(t.estado, t.bloqueada)}</td>
+            ${conAcciones ? `<td data-label="Acciones" class="acciones">${botonesEstado(t.id, t.estado, transicionesPosibles(t.estado, t.bloqueada))}</td>` : ""}
           </tr>`).join("")}
       </tbody>
     </table>
@@ -37,54 +35,87 @@ function tablaTareas(tareas, { conProyecto = false, conAcciones = false, vacio =
 // HU-03-004 Consultar mis tareas (de todos mis proyectos con acceso)
 async function vistaMisTareas() {
   const tareas = await API.get("/api/mis-tareas");
-  app.innerHTML = `
-    <div class="tarjeta">
-      <h1>Mis tareas</h1>
-      ${tablaTareas(tareas, { conProyecto: true, conAcciones: true, vacio: "No tienes tareas asignadas." })}
-    </div>`;
-  conectarBotonesEstado(app, vistaMisTareas);  // HU-04-001 desde la lista
+  const abiertas = tareas.filter((t) => t.estado !== "terminada").length;
+  const resumen = `${abiertas} abierta${abiertas === 1 ? "" : "s"} · ${tareas.length} en total`;
+  return {
+    titulo: "Mis tareas",
+    seccion: "tareas",
+    html: `
+      <header class="encabezado">
+        <div>
+          <h1 tabindex="-1">Mis tareas</h1>
+          <p class="subtitulo" data-conteo="tabla-mis-tareas" data-total="${resumen}">${resumen}</p>
+        </div>
+        ${tareas.length ? `<div class="encabezado-acciones">${buscadorTabla("tabla-mis-tareas", "Buscar en mis tareas")}</div>` : ""}
+      </header>
+      ${tablaTareas(tareas, {
+        id: "tabla-mis-tareas", conProyecto: true, conAcciones: true,
+        vacioHtml: vacio("No tienes tareas asignadas",
+          "Cuando el responsable de un proyecto te asigne una tarea, aparecerá aquí.",
+          `<a class="boton secundario" href="#/proyectos">Ver mis proyectos</a>`),
+      })}`,
+  };
 }
 
 // HU-03-001 Crear tarea (solo el responsable del proyecto)
 async function vistaNuevaTarea(pid) {
   const p = await API.get(`/api/proyectos/${pid}`);
-  if (!p.soy_responsable) { location.hash = "#/sin-acceso"; return; }
+  if (!p.soy_responsable) throw sinAcceso();
   const participantes = await API.get(`/api/proyectos/${pid}/participantes`);
-  app.innerHTML = `
-    <div class="tarjeta">
-      <a class="volver" href="#/proyectos/${pid}">← ${escapar(p.nombre)}</a>
-      <h1>Nueva tarea</h1>
-      <form id="f-tarea">
-        <label>Nombre <input name="nombre" required maxlength="120"></label>
-        <label>Descripción <textarea name="descripcion" required rows="3" maxlength="2000"></textarea></label>
-        <label>Resultado esperado (opcional) <textarea name="resultado_esperado" rows="2" maxlength="1000"></textarea></label>
-        <label>Responsable
-          <select name="responsable_id">${opcionesPersonas(participantes, null, "Sin asignar")}</select>
-        </label>
-        <div class="fila">
-          <label>Fecha límite (opcional) <input type="date" name="fecha_limite"></label>
-          <label>Prioridad <select name="prioridad">${opcionesPrioridad()}</select></label>
-        </div>
-        <div>
-          <button>Crear tarea</button>
-          <button type="button" class="secundario" onclick="location.hash='#/proyectos/${pid}'">Cancelar</button>
-        </div>
-      </form>
-    </div>`;
-  const form = document.getElementById("f-tarea");
-  const clave = nuevaClave();  // HU-08-002: reintentar este formulario no duplica la tarea
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const d = datosForm(form);
-    d.responsable_id = d.responsable_id ? Number(d.responsable_id) : null;
-    d.fecha_limite = d.fecha_limite || null;
-    const t = await guardar(form.querySelector("button"),
-      () => API.crear(`/api/proyectos/${pid}/tareas`, d, clave), "Tarea creada");
-    if (t) location.hash = `#/tareas/${t.id}`;
-  });
+  return {
+    titulo: `Nueva tarea · ${p.nombre}`,
+    seccion: "proyectos",
+    foco: "campo",
+    migas: [{ texto: "Mis proyectos", href: "#/proyectos" }, { texto: p.nombre, href: `#/proyectos/${p.id}` }, { texto: "Nueva tarea" }],
+    html: `
+      <div class="hoja">
+        <h1 tabindex="-1">Nueva tarea</h1>
+        <form id="f-tarea" class="formulario">
+          <label>Nombre <input name="nombre" required maxlength="120"></label>
+          <label>Descripción <textarea name="descripcion" required rows="4" maxlength="2000"></textarea></label>
+          <label>Resultado esperado <span class="opcional">opcional</span>
+            <textarea name="resultado_esperado" rows="2" maxlength="1000"></textarea></label>
+          <div class="fila">
+            <label>Responsable
+              <select name="responsable_id">${opcionesPersonas(participantes, null, "Sin asignar")}</select>
+            </label>
+            <label>Prioridad <select name="prioridad">${opcionesPrioridad()}</select></label>
+            <label>Fecha límite <span class="opcional">opcional</span> <input type="date" name="fecha_limite"></label>
+          </div>
+          <div class="acciones-form">
+            <button class="boton">Crear tarea</button>
+            <a class="boton secundario" href="#/proyectos/${p.id}">Cancelar</a>
+            <span class="pista"><kbd class="atajo-tecla">${TECLA_MOD} Enter</kbd> para crear</span>
+          </div>
+        </form>
+      </div>`,
+    montar() {
+      const form = document.getElementById("f-tarea");
+      const clave = nuevaClave();  // HU-08-002: reintentar este formulario no duplica la tarea
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const d = datosForm(form);
+        d.responsable_id = d.responsable_id ? Number(d.responsable_id) : null;
+        d.fecha_limite = d.fecha_limite || null;
+        const t = await guardar(form.querySelector("button"),
+          () => API.crear(`/api/proyectos/${pid}/tareas`, d, clave), "Tarea creada", { form });
+        if (t) location.hash = `#/tareas/${t.id}`;
+      });
+    },
+  };
 }
 
-// Detalle de una tarea
+function bloqueoResuelto(b) {
+  return `
+    <li class="bloqueo-resuelto">
+      <p><span class="etiqueta-campo">Motivo</span>${escapar(b.motivo)}</p>
+      <p class="meta">Reportado por ${escapar(b.abierto_por_nombre)} · ${momento(b.abierto_en)}</p>
+      <p><span class="etiqueta-campo">Resolución</span>${escapar(b.resolucion)}</p>
+      <p class="meta">Resuelto por ${escapar(b.resuelto_por_nombre)} · ${momento(b.resuelto_en)}</p>
+    </li>`;
+}
+
+// Detalle de una tarea: contenido a la izquierda, propiedades a la derecha (inspector)
 async function vistaTarea(id) {
   const t = await API.get(`/api/tareas/${id}`);
   const [participantes, bloqueos] = await Promise.all([
@@ -92,121 +123,158 @@ async function vistaTarea(id) {
     API.get(`/api/tareas/${id}/bloqueos`),
   ]);
   const resueltos = bloqueos.filter((b) => b.resuelto_en).reverse();
+  const puedeEstado = t.transiciones.length || t.puedo_bloquear;
 
-  app.innerHTML = `
-    <div class="tarjeta">
-      <a class="volver" href="#/proyectos/${t.proyecto_id}">← ${escapar(t.proyecto_nombre)}</a>
-      <div class="encabezado">
-        <h1>${escapar(t.nombre)}</h1>
-        <div>${etiquetaEstado(t.estado, t.bloqueada)}</div>
-      </div>
-      <dl>
-        <dt>Descripción</dt><dd>${escapar(t.descripcion)}</dd>
-        <dt>Resultado esperado</dt>
-        <dd>${t.resultado_esperado ? escapar(t.resultado_esperado) : `<span class="vacio">Sin definir</span>`}</dd>
-        <dt>Responsable</dt><dd>${t.responsable_nombre ? escapar(t.responsable_nombre) : SIN_ASIGNAR}</dd>
-        <dt>Prioridad</dt><dd>${etiquetaPrioridad(t.prioridad)}</dd>
-        <dt>Fecha límite</dt><dd>${t.fecha_limite || `<span class="vacio">Sin fecha</span>`}</dd>
-        <dt>Creada por</dt><dd>${escapar(t.creado_por_nombre)} · ${fechaHora(t.creado_en)}</dd>
-      </dl>
-      ${t.transiciones.length || t.puedo_bloquear ? `
-        <div class="acciones barra-acciones">
-          ${botonesEstado(t.id, t.estado, t.transiciones)}
-          ${t.puedo_bloquear ? `<button class="peligro chico" id="btn-bloquear">⛔ Reportar bloqueo</button>` : ""}
-        </div>` : ""}
-      <form id="f-bloqueo" class="oculto" style="margin-top:1rem">
-        <label>Motivo del bloqueo <textarea name="motivo" required rows="2" maxlength="1000"></textarea></label>
-        <div>
-          <button class="peligro">Registrar bloqueo</button>
-          <button type="button" class="secundario" id="btn-cancelar-bloqueo">Cancelar</button>
+  return {
+    titulo: t.nombre,
+    seccion: "proyectos",
+    nueva: t.puedo_planificar ? `#/proyectos/${t.proyecto_id}/tareas/nueva` : null,
+    textoNueva: `Nueva tarea en «${t.proyecto_nombre}»`,
+    migas: [{ texto: "Mis proyectos", href: "#/proyectos" },
+            { texto: t.proyecto_nombre, href: `#/proyectos/${t.proyecto_id}` }, { texto: t.nombre }],
+    html: `
+      <header class="ficha-encabezado">
+        <h1 tabindex="-1">${escapar(t.nombre)}</h1>
+        <div class="ficha-chips">${etiquetaEstado(t.estado, t.bloqueada)}</div>
+      </header>
+      <div class="ficha">
+        <div class="ficha-contenido">
+          ${t.bloqueo ? `
+          <section class="bloqueo-abierto" aria-labelledby="titulo-bloqueo">
+            <h2 id="titulo-bloqueo">${icono("bloqueo")}Bloqueo abierto</h2>
+            <p class="texto-largo">${escapar(t.bloqueo.motivo)}</p>
+            <p class="meta">Reportado por ${escapar(t.bloqueo.abierto_por_nombre)} · ${momento(t.bloqueo.abierto_en)}</p>
+            ${t.puedo_planificar ? `
+              <form id="f-resolver" class="formulario">
+                <label>¿Cómo se resolvió? <textarea name="resolucion" required rows="2" maxlength="1000"></textarea></label>
+                <div class="acciones-form"><button class="boton">Resolver bloqueo</button></div>
+              </form>` : `<p class="meta">El responsable del proyecto registra la resolución.</p>`}
+          </section>` : ""}
+
+          <section class="bloque">
+            <h2 class="titulo-seccion">Descripción</h2>
+            <p class="texto-largo">${escapar(t.descripcion)}</p>
+          </section>
+          <section class="bloque">
+            <h2 class="titulo-seccion">Resultado esperado</h2>
+            ${t.resultado_esperado ? `<p class="texto-largo">${escapar(t.resultado_esperado)}</p>` : `<p class="tenue">Sin definir</p>`}
+          </section>
+
+          ${resueltos.length ? `
+          <section class="bloque">
+            <h2 class="titulo-seccion">Bloqueos resueltos <span class="conteo">${resueltos.length}</span></h2>
+            <ul class="lista-bloqueos">${resueltos.map(bloqueoResuelto).join("")}</ul>
+          </section>` : ""}
         </div>
-      </form>
-    </div>
 
-    ${t.bloqueo ? `
-    <div class="tarjeta bloqueo-abierto">
-      <h2>⛔ Bloqueo abierto</h2>
-      <p>${escapar(t.bloqueo.motivo)}</p>
-      <p class="meta">Reportado por ${escapar(t.bloqueo.abierto_por_nombre)} · ${fechaHora(t.bloqueo.abierto_en)}</p>
-      ${t.puedo_planificar ? `
-        <form id="f-resolver" style="margin-top:1rem">
-          <label>¿Cómo se resolvió? <textarea name="resolucion" required rows="2" maxlength="1000"></textarea></label>
-          <div><button>Resolver bloqueo</button></div>
-        </form>` : ""}
-    </div>` : ""}
+        <aside class="inspector" aria-label="Propiedades de la tarea">
+          <section class="propiedad" id="prop-estado" tabindex="-1">
+            <h2 class="propiedad-titulo">Estado</h2>
+            <div class="ficha-chips">${etiquetaEstado(t.estado, t.bloqueada)}</div>
+            ${puedeEstado ? `
+              <div class="acciones">
+                ${botonesEstado(t.id, t.estado, t.transiciones)}
+                ${t.puedo_bloquear ? `<button type="button" class="boton chico peligro-suave" data-accion="mostrar-bloqueo">${icono("bloqueo")}Reportar bloqueo</button>` : ""}
+              </div>` : ""}
+            <form id="f-bloqueo" class="formulario" hidden>
+              <label>Motivo del bloqueo <textarea name="motivo" required rows="3" maxlength="1000"></textarea></label>
+              <div class="acciones-form">
+                <button class="boton peligro">Registrar bloqueo</button>
+                <button type="button" class="boton secundario" data-accion="ocultar-bloqueo">Cancelar</button>
+              </div>
+            </form>
+          </section>
 
-    ${resueltos.length ? `
-    <div class="tarjeta">
-      <h2>Bloqueos resueltos</h2>
-      ${resueltos.map((b) => `
-        <div class="bloqueo-resuelto">
-          <p><strong>Motivo:</strong> ${escapar(b.motivo)}</p>
-          <p class="meta">Reportado por ${escapar(b.abierto_por_nombre)} · ${fechaHora(b.abierto_en)}</p>
-          <p><strong>Resolución:</strong> ${escapar(b.resolucion)}</p>
-          <p class="meta">Resuelto por ${escapar(b.resuelto_por_nombre)} · ${fechaHora(b.resuelto_en)}</p>
-        </div>`).join("")}
-    </div>` : ""}
+          <section class="propiedad">
+            <h2 class="propiedad-titulo">Responsable</h2>
+            ${t.puedo_planificar ? `
+              <form id="f-responsable" class="formulario compacto">
+                <label><span class="solo-lector">Responsable</span>
+                  <select name="usuario_id" required>${opcionesPersonas(participantes, t.responsable_id, "Seleccionar persona…")}</select>
+                </label>
+                <button class="boton secundario chico">Asignar</button>
+              </form>` : (t.responsable_nombre ? persona(t.responsable_nombre) : sinAsignar())}
+          </section>
 
-    ${t.puedo_planificar ? `
-    <div class="tarjeta">
-      <h2>Planificación</h2>
-      <form id="f-responsable" class="fila">
-        <label>Responsable
-          <select name="usuario_id" required>${opcionesPersonas(participantes, t.responsable_id, "Seleccionar persona…")}</select>
-        </label>
-        <div class="accion"><button>Asignar</button></div>
-      </form>
-      <form id="f-plan" class="fila" style="margin-top:1rem">
-        <label>Fecha límite <input type="date" name="fecha_limite" value="${t.fecha_limite || ""}"></label>
-        <label>Prioridad <select name="prioridad">${opcionesPrioridad(t.prioridad)}</select></label>
-        <div><button>Guardar fecha y prioridad</button></div>
-      </form>
-    </div>` : ""}`;
+          <section class="propiedad">
+            <h2 class="propiedad-titulo">Planificación</h2>
+            ${t.puedo_planificar ? `
+              <form id="f-plan" class="formulario compacto">
+                <label>Prioridad <select name="prioridad">${opcionesPrioridad(t.prioridad)}</select></label>
+                <label>Fecha límite <input type="date" name="fecha_limite" value="${escapar(t.fecha_limite || "")}"></label>
+                <button class="boton secundario chico">Guardar planificación</button>
+              </form>` : `
+              <dl class="propiedades">
+                <dt>Prioridad</dt><dd>${etiquetaPrioridad(t.prioridad)}</dd>
+                <dt>Fecha límite</dt><dd class="num">${fecha(t.fecha_limite, "Sin fecha")}</dd>
+              </dl>`}
+          </section>
 
-  conectarBotonesEstado(app, () => vistaTarea(id));  // HU-04-001
+          <section class="propiedad">
+            <h2 class="propiedad-titulo">Registro</h2>
+            <p class="meta">Creada por ${escapar(t.creado_por_nombre)} · ${momento(t.creado_en)}</p>
+            ${botonCopiarEnlace(`#/tareas/${t.id}`)}
+          </section>
+        </aside>
+      </div>`,
 
-  // HU-04-003 Registrar bloqueo
-  const fBloq = document.getElementById("f-bloqueo");
-  const claveBloqueo = nuevaClave();  // HU-08-002
-  document.getElementById("btn-bloquear")?.addEventListener("click", () => {
-    fBloq.classList.remove("oculto");
-    fBloq.querySelector("textarea").focus();
-  });
-  document.getElementById("btn-cancelar-bloqueo").addEventListener("click", () => fBloq.classList.add("oculto"));
-  fBloq.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const ok = await guardar(fBloq.querySelector("button"),
-      () => API.crear(`/api/tareas/${id}/bloqueos`, datosForm(fBloq), claveBloqueo), "Bloqueo registrado");
-    if (ok) vistaTarea(id);
-  });
+    montar() {
+      // HU-04-003 Registrar bloqueo
+      const fBloq = document.getElementById("f-bloqueo");
+      const claveBloqueo = nuevaClave();  // HU-08-002
+      fBloq.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const ok = await guardar(fBloq.querySelector("button"),
+          () => API.crear(`/api/tareas/${id}/bloqueos`, datosForm(fBloq), claveBloqueo), "Bloqueo registrado", { form: fBloq });
+        if (ok) recargar();
+      });
 
-  // HU-04-004 Resolver bloqueo
-  const fRes = document.getElementById("f-resolver");
-  fRes?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const ok = await guardar(fRes.querySelector("button"),
-      () => API.post(`/api/tareas/${id}/bloqueos/${t.bloqueo.id}/resolver`, datosForm(fRes)), "Bloqueo resuelto");
-    if (ok) vistaTarea(id);
-  });
+      // HU-04-004 Resolver bloqueo
+      const fRes = document.getElementById("f-resolver");
+      fRes?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const ok = await guardar(fRes.querySelector("button"),
+          () => API.post(`/api/tareas/${id}/bloqueos/${t.bloqueo.id}/resolver`, datosForm(fRes)), "Bloqueo resuelto", { form: fRes });
+        if (ok) recargar();
+      });
 
-  // HU-03-002 Asignar responsable
-  const fResp = document.getElementById("f-responsable");
-  fResp?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const usuario_id = Number(datosForm(fResp).usuario_id);
-    const ok = await guardar(fResp.querySelector("button"),
-      () => API.put(`/api/tareas/${id}/responsable`, { usuario_id }), "Responsable asignado");
-    if (ok) vistaTarea(id);
-  });
+      // HU-03-002 Asignar responsable
+      const fResp = document.getElementById("f-responsable");
+      fResp?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const usuario_id = Number(datosForm(fResp).usuario_id);
+        const ok = await guardar(fResp.querySelector("button"),
+          () => API.put(`/api/tareas/${id}/responsable`, { usuario_id }), "Responsable asignado", { form: fResp });
+        if (ok) recargar();
+      });
 
-  // HU-03-003 Fecha límite y prioridad
-  const fPlan = document.getElementById("f-plan");
-  fPlan?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const d = datosForm(fPlan);
-    const cuerpo = { fecha_limite: d.fecha_limite || null, prioridad: d.prioridad };
-    const ok = await guardar(fPlan.querySelector("button"),
-      () => API.put(`/api/tareas/${id}/planificacion`, cuerpo), "Planificación guardada");
-    if (ok) vistaTarea(id);
-  });
+      // HU-03-003 Fecha límite y prioridad
+      const fPlan = document.getElementById("f-plan");
+      fPlan?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const d = datosForm(fPlan);
+        const cuerpo = { fecha_limite: d.fecha_limite || null, prioridad: d.prioridad };
+        const ok = await guardar(fPlan.querySelector("button"),
+          () => API.put(`/api/tareas/${id}/planificacion`, cuerpo), "Planificación guardada", { form: fPlan });
+        if (ok) recargar();
+      });
+    },
+  };
 }
+
+ACCIONES["mostrar-bloqueo"] = (btn) => {
+  const form = document.getElementById("f-bloqueo");
+  form.hidden = false;
+  btn.hidden = true;
+  form.querySelector("textarea").focus();
+};
+
+ACCIONES["ocultar-bloqueo"] = () => {
+  const form = document.getElementById("f-bloqueo");
+  form.hidden = true;
+  form.reset();
+  form.querySelector("textarea").dispatchEvent(new Event("input"));  // actualiza el contador
+  Formularios.marcarLimpio(form);
+  const btn = document.querySelector("[data-accion='mostrar-bloqueo']");
+  if (btn) { btn.hidden = false; btn.focus(); }
+};

@@ -1,4 +1,7 @@
 import pytest
+from sqlalchemy import text
+
+from app.db.database import get_engine
 
 from .helpers import crear_usuario, login
 
@@ -91,3 +94,66 @@ def test_logout_invalida_token(escenario):
     c, ana = escenario["c"], escenario["ana"]
     assert c.post("/api/auth/logout", headers=ana).status_code == 200
     assert c.get(f"/api/proyectos/{escenario['pid']}", headers=ana).status_code == 401
+
+
+def sql(consulta, **params):
+    with get_engine().connect() as conn:
+        conn.execute(text(consulta), params)
+        conn.commit()
+
+
+# HU-01-003 Freno a la fuerza bruta: igual para cuentas que existen y que no
+def test_freno_a_intentos_fallidos(client):
+    from app.modules.acceso.service import INTENTOS
+    for usuario in ("admin", "fantasma"):
+        respuestas = [client.post("/api/auth/login", json={"usuario": usuario, "password": "mala"}) for _ in range(5)]
+        assert {r.status_code for r in respuestas} == {401}
+        r = client.post("/api/auth/login", json={"usuario": usuario, "password": "Admin123!"})
+        assert r.status_code == 429 and "Demasiados intentos" in r.json()["detail"]  # ni con la correcta
+    reloj = INTENTOS.reloj
+    INTENTOS.reloj = lambda: reloj() + 10  # pasa la espera
+    try:
+        assert client.post("/api/auth/login", json={"usuario": "admin", "password": "Admin123!"}).status_code == 200
+        assert client.post("/api/auth/login", json={"usuario": "admin", "password": "mala"}).status_code == 401
+    finally:
+        INTENTOS.reloj = reloj
+
+
+# Sesión con expiración por inactividad
+def test_sesion_expira_por_inactividad(escenario):
+    c, ana = escenario["c"], escenario["ana"]
+    assert c.get("/api/auth/me", headers=ana).status_code == 200
+    sql("UPDATE sesiones SET ultimo_uso = '2000-01-01 00:00:00' WHERE token = :t", t=ana["Authorization"][7:])
+    r = c.get("/api/auth/me", headers=ana)
+    assert r.status_code == 401 and "expiró" in r.json()["detail"]
+    r = c.get("/api/auth/me", headers=ana)  # la sesión vencida ya se borró
+    assert r.status_code == 401 and "no es válida" in r.json()["detail"]
+    assert c.get("/api/proyectos", headers={"Authorization": "Bearer x"}).status_code == 401
+
+
+# HU-01-007 / RP-04: /auth/me refleja la función vigente aunque la sesión siga abierta
+def test_me_refleja_cambio_de_funcion(escenario):
+    c, beto = escenario["c"], escenario["beto"]
+    assert c.get("/api/auth/me", headers=beto).json()["funcion"] == "Integrante"
+    sql("UPDATE usuarios SET funcion_id = (SELECT id FROM funciones WHERE nombre = 'Responsable') WHERE id = :id",
+        id=escenario["beto_id"])
+    assert c.get("/api/auth/me", headers=beto).json()["funcion"] == "Responsable"
+
+
+# HU-08-002 en el registro de cuentas
+def test_registro_reintento_con_la_misma_clave(client):
+    adm = login(client, "admin", "Admin123!")
+    datos = {"usuario": "dora", "nombre": "Dora", "password": "clave123", "funcion_id": 3}
+    con_clave = {**adm, "Idempotency-Key": "cuenta-1"}
+    r1, r2 = (client.post("/api/usuarios", headers=con_clave, json=datos) for _ in range(2))
+    assert r1.status_code == r2.status_code == 201 and r1.json() == r2.json()
+    assert r1.json()["activo"] is True
+    assert client.post("/api/usuarios", headers={**adm, "Idempotency-Key": "cuenta-2"}, json=datos).status_code == 409
+
+
+def test_cabeceras_de_seguridad(client):
+    r = client.get("/")
+    assert "script-src 'self'" in r.headers["content-security-policy"]
+    assert r.headers["x-content-type-options"] == "nosniff"
+    api = client.get("/api/proyectos")
+    assert api.headers["x-content-type-options"] == "nosniff" and "content-security-policy" not in api.headers

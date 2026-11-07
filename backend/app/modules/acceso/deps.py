@@ -6,20 +6,17 @@ permisos aplica aunque la sesión ya esté abierta.
 """
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header
 
-from ...core.errors import Prohibido
+from ...core.errors import NoAutenticado, Prohibido
 from ...db.database import get_db
 from . import service
 
 
 def usuario_actual(authorization: Optional[str] = Header(None), db=Depends(get_db)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Sesión no válida")
-    u = service.usuario_por_token(db, authorization[7:])
-    if not u:
-        raise HTTPException(status_code=401, detail="Sesión no válida")
-    return u
+        raise NoAutenticado(service.MSG_SESION)
+    return service.sesion_vigente(db, authorization[7:])
 
 
 def requiere_funcion(*funciones: str):

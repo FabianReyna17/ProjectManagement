@@ -5,6 +5,8 @@
 **Modelo de entrega:** producto para **un solo cliente** (single-tenant), instalado en su infraestructura o en una nube a su nombre.
 **Stack:** Python · FastAPI · PostgreSQL · HTML/CSS/JavaScript (módulos ES) · Docker Compose · GitHub Actions
 
+> **Estado actual (fin del Sprint 2):** PostgreSQL, Docker Compose y los módulos ES **aún no están implementados**. El código usa SQLite (SQLAlchemy Core + Alembic) y scripts clásicos cargados en orden desde `index.html`. Las decisiones de este documento siguen siendo el objetivo; el trabajo pendiente y lo que implica está en el [README, sección "Pendientes técnicos"](../README.md#pendientes-técnicos).
+
 **Principio:** la arquitectura se construye **de forma incremental**, una historia a la vez. Se parte del MVP del Sprint 1 y solo se agrega una pieza cuando una historia la necesita. No se reescribe lo que ya funciona.
 
 | Nivel C4 | Pregunta que responde | Sección |

@@ -1,0 +1,152 @@
+/* ==========================================================================
+   Vistas: login, formularios, ficha de tarea, proyecto, usuarios y ajustes de teléfono.
+   ========================================================================== */
+
+/* ---------- Login ---------- */
+
+.acceso {
+  display: grid;
+  gap: var(--e-4);
+  width: min(340px, 100%);
+  margin: 14vh auto 0;
+}
+.acceso-marca { color: var(--texto-2); font-size: var(--t-sm); font-weight: var(--peso-fuerte); }
+.acceso h1 { font-size: var(--t-xl); }
+.acceso .formulario { margin-top: var(--e-2); }
+
+/* ---------- Formularios de alta ---------- */
+
+.hoja { max-width: var(--ancho-hoja); }
+.hoja h1 { margin-bottom: var(--e-6); }
+
+/* ---------- Ficha de tarea: contenido + inspector ---------- */
+
+.ficha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--ancho-inspector);
+  gap: var(--e-8);
+  align-items: start;
+}
+.ficha-contenido { display: grid; gap: var(--e-6); min-width: 0; }
+.ficha-contenido .bloque + .bloque { margin-top: 0; }
+.ficha-encabezado { display: grid; gap: var(--e-3); margin-bottom: var(--e-6); }
+.ficha-encabezado h1 { font-size: var(--t-2xl); overflow-wrap: anywhere; }
+.ficha-chips { display: flex; flex-wrap: wrap; gap: var(--e-2); }
+
+.inspector {
+  position: sticky;
+  top: var(--e-6);
+  display: grid;
+  border: 1px solid var(--borde);
+  border-radius: var(--r-2);
+  background: var(--superficie);
+}
+.propiedad { display: grid; gap: var(--e-3); padding: var(--e-4); }
+.propiedad + .propiedad { border-top: 1px solid var(--borde); }
+.propiedad:focus-visible { box-shadow: inset 0 0 0 2px var(--acento); border-radius: var(--r-2); }
+.propiedad-titulo { color: var(--texto-2); font-size: var(--t-xs); font-weight: var(--peso-medio); }
+.propiedad .formulario label { font-weight: var(--peso-normal); color: var(--texto-2); }
+.propiedad > .boton { justify-self: start; }
+
+.propiedades { display: grid; grid-template-columns: auto 1fr; gap: var(--e-2) var(--e-4); margin: 0; align-items: center; }
+.propiedades dt { color: var(--texto-2); font-size: var(--t-sm); }
+.propiedades dd { margin: 0; }
+
+.bloqueo-abierto {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-4);
+  border: 1px solid var(--peligro-borde);
+  border-left: 3px solid var(--peligro);
+  border-radius: var(--r-2);
+  background: var(--peligro-suave);
+}
+.bloqueo-abierto h2 { display: flex; align-items: center; gap: var(--e-2); color: var(--peligro); font-size: var(--t-sm); }
+.bloqueo-abierto .formulario { margin-top: var(--e-2); }
+.bloqueo-abierto textarea { background: var(--superficie); }
+
+.lista-bloqueos { display: grid; border: 1px solid var(--borde); border-radius: var(--r-2); background: var(--superficie); }
+.bloqueo-resuelto { display: grid; gap: var(--e-1); padding: var(--e-3) var(--e-4); }
+.bloqueo-resuelto + .bloqueo-resuelto { border-top: 1px solid var(--borde); }
+.bloqueo-resuelto .meta + p { margin-top: var(--e-2); }
+.etiqueta-campo { display: block; color: var(--texto-2); font-size: var(--t-xs); font-weight: var(--peso-medio); }
+
+/* ---------- Proyecto ---------- */
+
+.lista-personas { border: 1px solid var(--borde); border-radius: var(--r-2); background: var(--superficie); }
+.lista-personas li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--e-3);
+  min-height: var(--alto-fila);
+  padding: var(--e-1) var(--e-3);
+}
+.lista-personas li + li { border-top: 1px solid var(--borde); }
+.lista-personas .funcion { color: var(--texto-2); font-size: var(--t-sm); }
+.lista-personas .boton { grid-column: 4; }
+.formulario.en-linea { max-width: 480px; }
+
+/* ---------- Usuarios ---------- */
+
+.dos-columnas { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: var(--e-8); align-items: start; }
+.dos-columnas > .bloque + .bloque { margin-top: 0; }
+
+/* ---------- Teléfono y tableta ---------- */
+
+@media (max-width: 899px) {
+  .ficha, .dos-columnas { grid-template-columns: 1fr; gap: var(--e-6); }
+  .inspector { position: static; order: -1; }
+  .ficha-contenido { order: 0; }
+  .ficha-encabezado h1 { font-size: var(--t-xl); }
+}
+
+@media (max-width: 640px) {
+  main { padding-top: var(--e-4); }
+  h1 { font-size: var(--t-lg); }
+  .encabezado { align-items: stretch; margin-bottom: var(--e-4); }
+  .encabezado-acciones { width: 100%; }
+  .encabezado-acciones .filtro { flex: 1; width: auto; }
+  .encabezado-seccion .filtro { width: 100%; }
+  .pista { display: none; }
+  /* 16 px evita el zoom automático de iOS al enfocar */
+  input, select, textarea { font-size: var(--t-md); }
+  .boton { min-height: 40px; }
+  .boton.chico { min-height: 36px; }
+
+  /* Tablas como lista de tarjetas: cada celda con su etiqueta */
+  .tabla-tarjetas thead { display: none; }
+  .tabla-tarjetas, .tabla-tarjetas tbody, .tabla-tarjetas tr { display: block; }
+  .tabla-tarjetas tr { padding: var(--e-3); border-bottom: 1px solid var(--borde); }
+  .tabla-tarjetas tbody tr:last-child { border-bottom: 0; }
+  .tabla-tarjetas td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--e-3);
+    height: auto;
+    min-height: 28px;
+    padding: 2px 0;
+    border: 0;
+  }
+  .tabla-tarjetas td[data-label]:not(.celda-principal)::before {
+    content: attr(data-label);
+    color: var(--texto-2);
+    font-size: var(--t-sm);
+  }
+  .tabla-tarjetas td.celda-principal { padding-bottom: var(--e-1); font-size: var(--t-md); }
+  .tabla-tarjetas td.acciones { display: flex; justify-content: flex-end; padding-top: var(--e-2); }
+  .tabla-tarjetas td.acciones::before { content: none; }
+  .tabla-tarjetas .fila-bloqueada td:first-child { box-shadow: none; }
+  .tabla-tarjetas .fila-bloqueada { box-shadow: inset 3px 0 0 var(--peligro); }
+  .tabla-tarjetas .fila-sin-resultados td { justify-content: center; }
+
+  .lista-personas li { grid-template-columns: minmax(0, 1fr) auto; gap: var(--e-1) var(--e-3); padding: var(--e-3); }
+  .lista-personas li > .tenue, .lista-personas .funcion { grid-column: 1; font-size: var(--t-sm); }
+  .lista-personas .boton { grid-column: 2; grid-row: 1 / span 3; }
+  .formulario.en-linea { grid-template-columns: 1fr; }
+
+  .dialogo-acciones { flex-direction: column-reverse; }
+  .dialogo-acciones .boton { width: 100%; }
+  .lista-atajos div { grid-template-columns: 88px 1fr; }
+}

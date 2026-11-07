@@ -35,6 +35,11 @@ def obtener(db, tarea_id: int) -> Optional[dict]:
                        WHERE t.id = :id""", id=tarea_id)
 
 
+# Orden común de las listas: abiertas primero, bloqueadas arriba, luego por fecha límite
+# (sin fecha al final) y prioridad
+ORDEN_LISTA = f"""t.estado = 'terminada', NOT {BLOQUEADA}, t.fecha_limite IS NULL, t.fecha_limite,
+                  CASE t.prioridad WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END, t.id"""
+
 COLUMNAS_LISTA = """t.id, t.proyecto_id, t.nombre, t.estado, t.prioridad, t.fecha_limite,
                      t.responsable_id, r.nombre AS responsable_nombre, """ + BLOQUEADA + " AS bloqueada"
 
@@ -42,12 +47,12 @@ COLUMNAS_LISTA = """t.id, t.proyecto_id, t.nombre, t.estado, t.prioridad, t.fech
 def listar_de_proyecto(db, proyecto_id: int) -> list:
     return varios(db, f"""SELECT {COLUMNAS_LISTA}
                            FROM tareas t LEFT JOIN usuarios r ON r.id = t.responsable_id
-                           WHERE t.proyecto_id = :p ORDER BY t.id""", p=proyecto_id)
+                           WHERE t.proyecto_id = :p ORDER BY {ORDEN_LISTA}""", p=proyecto_id)
 
 
 def listar_asignadas(db, usuario_id: int) -> list:
     """Tareas asignadas al usuario en proyectos donde aún participa.
-    Primero las abiertas, por fecha límite (sin fecha al final) y prioridad."""
+    Mismo orden que la lista del proyecto (ORDEN_LISTA)."""
     return varios(db, f"""SELECT {COLUMNAS_LISTA}, p.nombre AS proyecto_nombre
                            FROM tareas t
                            JOIN proyectos p     ON p.id = t.proyecto_id
@@ -55,9 +60,7 @@ def listar_asignadas(db, usuario_id: int) -> list:
                                                 AND pa.usuario_id = :u AND pa.activo = 1
                            LEFT JOIN usuarios r ON r.id = t.responsable_id
                            WHERE t.responsable_id = :u
-                           ORDER BY t.estado = 'terminada', t.fecha_limite IS NULL, t.fecha_limite,
-                                    CASE t.prioridad WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END,
-                                    t.id""", u=usuario_id)
+                           ORDER BY {ORDEN_LISTA}""", u=usuario_id)
 
 
 def actualizar_responsable(db, tarea_id: int, responsable_id: int) -> None:

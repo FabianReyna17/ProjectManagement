@@ -3,30 +3,126 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>Gestión de Proyectos</title>
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/componentes.css">
+  <link rel="stylesheet" href="css/vistas.css">
+  <!-- Antes de pintar: aplica el tema elegido para que no parpadee -->
+  <script src="js/tema.js"></script>
 </head>
-<body>
-  <header id="barra" class="oculto">
-    <span class="marca">Gestión de Proyectos</span>
-    <nav>
-      <a href="#/proyectos">Mis proyectos</a>
-      <a href="#/mis-tareas">Mis tareas</a>
-      <a href="#/usuarios" id="nav-usuarios" class="oculto">Usuarios</a>
+<body class="sin-sesion">
+  <!-- Iconos propios: trazo 1.75, se usan con <svg><use href="#i-..."></svg> y siempre junto a un texto -->
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-proyectos" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
+      <symbol id="i-tareas" viewBox="0 0 24 24"><path d="M4.5 6.5l1.5 1.5 3-3M4.5 12.5l1.5 1.5 3-3M4.5 18.5l1.5 1.5 3-3M12 7h7.5M12 13h7.5M12 19h7.5"/></symbol>
+      <symbol id="i-usuarios" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 19.5c.8-3.2 3.3-5 6.5-5s5.7 1.8 6.5 5M15.5 5.2a3.5 3.5 0 0 1 0 6.6M17.5 14.8c2 .6 3.4 2.2 4 4.7"/></symbol>
+      <symbol id="i-buscar" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></symbol>
+      <symbol id="i-mas" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-salir" viewBox="0 0 24 24"><path d="M14 4.5h3.5a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H14M10 8l-4 4 4 4M6 12h9.5"/></symbol>
+      <symbol id="i-tema" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5v15a7.5 7.5 0 0 0 0-15z" class="relleno"/></symbol>
+      <symbol id="i-enlace" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+      <symbol id="i-bloqueo" viewBox="0 0 24 24"><path d="M8.3 3.5h7.4l4.8 4.8v7.4l-4.8 4.8H8.3l-4.8-4.8V8.3z"/><path d="M8 12h8"/></symbol>
+      <symbol id="i-aviso" viewBox="0 0 24 24"><path d="M12 4l8.5 15h-17z"/><path d="M12 10v4M12 16.8v.2"/></symbol>
+      <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M8 12.3l2.7 2.7L16 9.5"/></symbol>
+      <symbol id="i-error" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5M12 16.2v.3"/></symbol>
+      <symbol id="i-cerrar" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+      <symbol id="i-orden" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4" class="arriba"/><path d="M8 14l4 4 4-4" class="abajo"/></symbol>
+      <symbol id="i-ojo" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="i-ojo-no" viewBox="0 0 24 24"><path d="M4 4l16 16M9.9 6A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.8 3.5M6.5 7.6A16 16 0 0 0 2.5 12S6 18.5 12 18.5c1.6 0 3-.4 4.2-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+      <symbol id="i-teclado" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7 14.5h10"/></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+      <symbol id="i-est-pendiente" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/></symbol>
+      <symbol id="i-est-en_curso" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" class="relleno"/></symbol>
+      <symbol id="i-est-terminada" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" class="relleno"/><path d="M5.3 8.2l1.8 1.8 3.6-3.7" class="sobre-relleno"/></symbol>
+      <symbol id="i-est-planificado" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" stroke-dasharray="2.2 2"/></symbol>
+      <symbol id="i-est-cerrado" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2" class="relleno"/></symbol>
+    </defs>
+  </svg>
+
+  <button type="button" class="saltar" data-accion="saltar">Saltar al contenido</button>
+
+  <div class="marco">
+    <!-- Escritorio: barra lateral -->
+    <aside class="lateral" aria-label="Navegación principal">
+      <div class="lateral-marca">Gestión de Proyectos</div>
+      <button type="button" class="buscador" data-accion="paleta">
+        <svg class="icono" aria-hidden="true"><use href="#i-buscar"/></svg>
+        <span>Buscar o ir a…</span>
+        <kbd class="atajo-tecla" data-tecla-mod>Ctrl K</kbd>
+      </button>
+      <nav class="nav-principal">
+        <a href="#/proyectos" data-seccion="proyectos"><svg class="icono" aria-hidden="true"><use href="#i-proyectos"/></svg>Mis proyectos</a>
+        <a href="#/mis-tareas" data-seccion="tareas"><svg class="icono" aria-hidden="true"><use href="#i-tareas"/></svg>Mis tareas</a>
+        <a href="#/usuarios" data-seccion="usuarios" data-solo-admin hidden><svg class="icono" aria-hidden="true"><use href="#i-usuarios"/></svg>Usuarios</a>
+      </nav>
+      <section class="recientes" aria-labelledby="titulo-recientes">
+        <h2 id="titulo-recientes" class="lateral-titulo">Proyectos recientes</h2>
+        <ul id="lista-recientes"></ul>
+      </section>
+      <div class="lateral-pie" data-menu-cuenta></div>
+    </aside>
+
+    <!-- Teléfono: barra superior compacta -->
+    <header class="barra-movil">
+      <span class="barra-movil-marca">Gestión de Proyectos</span>
+      <div data-menu-cuenta></div>
+    </header>
+
+    <main id="app" tabindex="-1"></main>
+
+    <!-- Teléfono: navegación inferior -->
+    <nav class="nav-inferior" aria-label="Navegación principal">
+      <a href="#/proyectos" data-seccion="proyectos"><svg class="icono" aria-hidden="true"><use href="#i-proyectos"/></svg><span>Proyectos</span></a>
+      <a href="#/mis-tareas" data-seccion="tareas"><svg class="icono" aria-hidden="true"><use href="#i-tareas"/></svg><span>Mis tareas</span></a>
+      <button type="button" data-accion="paleta"><svg class="icono" aria-hidden="true"><use href="#i-buscar"/></svg><span>Buscar</span></button>
+      <a href="#/usuarios" data-seccion="usuarios" data-solo-admin hidden><svg class="icono" aria-hidden="true"><use href="#i-usuarios"/></svg><span>Usuarios</span></a>
     </nav>
-    <div class="sesion">
-      <span id="usuario-actual"></span>
-      <button id="btn-salir" class="secundario">Salir</button>
+  </div>
+
+  <!-- HU-08-001: avisos de guardado/error. Éxito en polite; errores en assertive -->
+  <div class="pila-avisos">
+    <div id="avisos" aria-live="polite"></div>
+    <div id="avisos-urgentes" aria-live="assertive"></div>
+  </div>
+
+  <dialog id="dlg-confirmar" class="dialogo" aria-labelledby="dlg-confirmar-titulo" aria-describedby="dlg-confirmar-texto">
+    <form method="dialog">
+      <h2 id="dlg-confirmar-titulo"></h2>
+      <p id="dlg-confirmar-texto"></p>
+      <div class="dialogo-acciones">
+        <button value="no" class="boton secundario" data-cancelar>Cancelar</button>
+        <button value="si" class="boton" data-aceptar>Aceptar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-paleta" class="dialogo paleta" aria-label="Buscar o ir a">
+    <div class="paleta-entrada">
+      <svg class="icono" aria-hidden="true"><use href="#i-buscar"/></svg>
+      <input id="paleta-texto" type="text" role="combobox" aria-expanded="true" aria-controls="paleta-lista"
+             aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Proyecto, tarea o comando…">
+      <kbd class="atajo-tecla">Esc</kbd>
     </div>
-  </header>
+    <ul id="paleta-lista" role="listbox" aria-label="Resultados"></ul>
+  </dialog>
 
-  <main id="app"></main>
-
-  <!-- HU-08-001: aviso común de guardado / error -->
-  <div id="toast" role="status" aria-live="polite"></div>
+  <dialog id="dlg-atajos" class="dialogo" aria-labelledby="dlg-atajos-titulo">
+    <form method="dialog">
+      <h2 id="dlg-atajos-titulo">Atajos de teclado</h2>
+      <dl class="lista-atajos" id="lista-atajos"></dl>
+      <div class="dialogo-acciones"><button class="boton secundario">Cerrar</button></div>
+    </form>
+  </dialog>
 
   <script src="js/api.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/componentes.js"></script>
+  <script src="js/atajos.js"></script>
   <script src="js/tareas.js"></script>
   <script src="js/app.js"></script>
 </body>

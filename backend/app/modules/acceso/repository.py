@@ -11,9 +11,9 @@ class UsuarioDuplicado(Exception):
     pass
 
 
-
 def buscar_por_token(db, token: str) -> Optional[dict]:
-    return uno(db, """SELECT u.id, u.usuario, u.nombre, u.activo, f.nombre AS funcion
+    return uno(db, """SELECT u.id, u.usuario, u.nombre, u.activo, f.nombre AS funcion,
+                              COALESCE(s.ultimo_uso, s.creado_en) AS ultimo_uso
                        FROM sesiones s
                        JOIN usuarios u  ON u.id = s.usuario_id
                        JOIN funciones f ON f.id = u.funcion_id
@@ -26,12 +26,21 @@ def buscar_por_usuario(db, usuario: str) -> Optional[dict]:
                        WHERE u.usuario = :usuario""", usuario=usuario)
 
 
-def crear_sesion(db, token: str, usuario_id: int) -> None:
-    db.execute(text("INSERT INTO sesiones (token, usuario_id) VALUES (:t, :u)"), {"t": token, "u": usuario_id})
+def crear_sesion(db, token: str, usuario_id: int, ahora: str) -> None:
+    db.execute(text("INSERT INTO sesiones (token, usuario_id, ultimo_uso) VALUES (:t, :u, :ahora)"),
+               {"t": token, "u": usuario_id, "ahora": ahora})
+
+
+def tocar_sesion(db, token: str, ahora: str) -> None:
+    db.execute(text("UPDATE sesiones SET ultimo_uso = :ahora WHERE token = :t"), {"t": token, "ahora": ahora})
 
 
 def borrar_sesion(db, token: str) -> None:
     db.execute(text("DELETE FROM sesiones WHERE token = :t"), {"t": token})
+
+
+def borrar_sesiones_inactivas(db, limite: str) -> None:
+    db.execute(text("DELETE FROM sesiones WHERE COALESCE(ultimo_uso, creado_en) < :limite"), {"limite": limite})
 
 
 def listar_funciones(db) -> list:
@@ -57,6 +66,10 @@ def insertar_usuario(db, usuario: str, nombre: str, password_hash: str, funcion_
         ).lastrowid
     except IntegrityError as e:
         raise UsuarioDuplicado() from e
+
+
+def obtener_usuario(db, usuario_id: int) -> Optional[dict]:
+    return uno(db, "SELECT id, usuario, nombre, activo FROM usuarios WHERE id = :id", id=usuario_id)
 
 
 def es_cuenta_activa(db, usuario_id: int) -> bool:

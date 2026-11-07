@@ -36,12 +36,17 @@ class Conflicto(ErrorNegocio):
     """La operación choca con el estado actual de los datos (409)."""
 
 
+class DemasiadosIntentos(ErrorNegocio):
+    """Demasiados intentos fallidos seguidos; hay que esperar (429)."""
+
+
 CODIGO_HTTP = {
     DatosInvalidos: 400,
     NoAutenticado: 401,
     Prohibido: 403,
     NoEncontrado: 404,
     Conflicto: 409,
+    DemasiadosIntentos: 429,
 }
 
 

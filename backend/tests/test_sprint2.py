@@ -198,6 +198,7 @@ def test_registrar_bloqueo_visible_sin_cambiar_estado(esc):
     assert detalle["bloqueo"]["motivo"] == "Falta acceso al servidor"
     assert esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.ana).json()[0]["bloqueada"]
     assert esc.c.get("/api/mis-tareas", headers=esc.beto).json()[0]["bloqueada"]
+    assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.beto).json()["transiciones"] == ["pendiente"]
     # no se termina con un bloqueo abierto
     assert esc.c.put(f"/api/tareas/{t['id']}/estado", headers=esc.beto, json={"estado": "terminada"}).status_code == 400
 
@@ -291,3 +292,18 @@ def test_primer_envio_fallido_se_registra_una_vez_en_el_reintento(esc):
     ok = [esc.c.post(url, headers=clave, json={"nombre": "T", "descripcion": "D"}) for _ in range(2)]
     assert [r.status_code for r in ok] == [201, 201] and ok[0].json()["id"] == ok[1].json()["id"]
     assert len(esc.c.get(url, headers=esc.ana).json()) == 1
+
+
+# Orden coherente de la lista del proyecto (igual que "Mis tareas")
+def test_orden_de_tareas_del_proyecto(esc):
+    terminada = crear_tarea(esc, nombre="Terminada", responsable_id=esc.beto_id, prioridad="alta")
+    for estado in ("en_curso", "terminada"):
+        esc.c.put(f"/api/tareas/{terminada['id']}/estado", headers=esc.ana, json={"estado": estado})
+    sin_fecha = crear_tarea(esc, nombre="Sin fecha", prioridad="alta")
+    baja = crear_tarea(esc, nombre="Baja", fecha_limite="2026-11-15", prioridad="baja")
+    alta = crear_tarea(esc, nombre="Alta", fecha_limite="2026-11-15", prioridad="alta")
+    pronto = crear_tarea(esc, nombre="Pronto", fecha_limite="2026-11-10", prioridad="baja")
+    bloqueada = crear_tarea(esc, nombre="Bloqueada", responsable_id=esc.beto_id, fecha_limite="2026-11-30")
+    bloquear(esc, bloqueada)
+    orden = [t["id"] for t in esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.ana).json()]
+    assert orden == [bloqueada["id"], pronto["id"], alta["id"], baja["id"], sin_fecha["id"], terminada["id"]]

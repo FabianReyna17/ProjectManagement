@@ -1,6 +1,6 @@
 # Arquitectura C4 — Sistema de Gestión de Proyectos
 
-**Versión:** combinada (C4 de Fabián + revisión de código de Angel) · 6 de noviembre de 2026
+**Versión:** 6 de noviembre de 2026
 **Fuentes:** `Epicas_Gestion_Proyectos.md`, `UserStoryMapping_Gestion_Proyectos.md`, `Planning_Sprints_ProjectManagement.md` y el código del Sprint 1.
 **Modelo de entrega:** producto para **un solo cliente** (single-tenant), instalado en su infraestructura o en una nube a su nombre.
 **Stack:** Python · FastAPI · PostgreSQL · HTML/CSS/JavaScript (módulos ES) · Docker Compose · GitHub Actions

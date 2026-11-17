@@ -6,7 +6,7 @@ from ...db.database import get_db
 from ..acceso.deps import requiere_funcion, usuario_actual
 from . import service
 from .deps import proyecto_autorizado
-from .schemas import ParticipanteIn, ProyectoIn
+from .schemas import ParticipanteIn, ProyectoEditarIn, ProyectoIn
 
 router = APIRouter(prefix="/api/proyectos", tags=["proyectos"])
 
@@ -26,6 +26,18 @@ def crear_proyecto(data: ProyectoIn, u: dict = Depends(requiere_funcion("Admin",
 @router.get("/{proyecto_id}")
 def ficha_proyecto(proyecto: dict = Depends(proyecto_autorizado), u: dict = Depends(usuario_actual)):
     return service.ficha(proyecto, u["id"])
+
+
+@router.put("/{proyecto_id}")
+def actualizar_proyecto(data: ProyectoEditarIn, proyecto: dict = Depends(proyecto_autorizado),
+                        u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.actualizar(db, proyecto, u["id"], data.nombre, data.objetivo, data.responsable_id,
+                              data.fecha_inicio, data.fecha_fin)
+
+
+@router.get("/{proyecto_id}/historial")
+def historial_proyecto(proyecto: dict = Depends(proyecto_autorizado), db=Depends(get_db)):
+    return service.historial(db, proyecto)
 
 
 @router.get("/{proyecto_id}/participantes")

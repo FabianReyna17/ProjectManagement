@@ -8,6 +8,7 @@ const rutas = [
   { patron: /^#\/proyectos$/, vista: vistaProyectos, esqueleto: "tabla" },
   { patron: /^#\/proyectos\/nuevo$/, vista: vistaNuevoProyecto, esqueleto: "form" },
   { patron: /^#\/proyectos\/(\d+)$/, vista: vistaProyecto, esqueleto: "ficha" },
+  { patron: /^#\/proyectos\/(\d+)\/editar$/, vista: vistaEditarProyecto, esqueleto: "form" },
   { patron: /^#\/proyectos\/(\d+)\/tareas\/nueva$/, vista: vistaNuevaTarea, esqueleto: "form" },
   { patron: /^#\/tareas\/(\d+)$/, vista: vistaTarea, esqueleto: "ficha" },
   { patron: /^#\/mis-tareas$/, vista: vistaMisTareas, esqueleto: "tabla" },
@@ -428,9 +429,9 @@ async function vistaNuevoProyecto() {
 async function vistaProyecto(id) {
   const p = await API.get(`/api/proyectos/${id}`);
   const modo = vistaTareasElegida();
-  const [participantes, datosTareas, usuarios] = await Promise.all([
+  const [participantes, datosTareas, usuarios, cambios] = await Promise.all([
     API.get(`/api/proyectos/${id}/participantes`), API.get(`/api/proyectos/${id}/${modo}`),
-    p.soy_responsable ? API.get("/api/usuarios") : [],
+    p.soy_responsable ? API.get("/api/usuarios") : [], API.get(`/api/proyectos/${id}/historial`),
   ]);
   const tareas = modo === "tablero" ? datosTareas.columnas.flatMap((c) => c.tareas) : datosTareas;
   const ids = new Set(participantes.map((x) => x.id));
@@ -458,6 +459,7 @@ async function vistaProyecto(id) {
         </div>
         <div class="encabezado-acciones">
           ${botonCopiarEnlace(`#/proyectos/${p.id}`)}
+          ${p.soy_responsable ? `<a class="boton secundario" href="#/proyectos/${p.id}/editar">Editar proyecto</a>` : ""}
           ${p.soy_responsable ? `<a class="boton" href="${nuevaTarea}">${icono("mas")}Nueva tarea</a>` : ""}
         </div>
       </header>
@@ -507,7 +509,13 @@ async function vistaProyecto(id) {
             </label>
             <button class="boton secundario">Dar acceso</button>
           </form>` : `<p class="tenue">Todas las cuentas activas ya participan.</p>`) : ""}
-      </section>`,
+      </section>
+
+      ${cambios.length ? `
+      <section class="bloque" aria-labelledby="titulo-cambios">
+        <h2 class="titulo-seccion" id="titulo-cambios">Cambios del plan <span class="conteo">${cambios.length}</span></h2>
+        <ol class="lista-cambios">${cambios.slice().reverse().map(cambioProyecto).join("")}</ol>
+      </section>` : ""}`,
 
     montar() {
       const form = document.getElementById("f-participante");
@@ -517,6 +525,85 @@ async function vistaProyecto(id) {
         const ok = await guardar(form.querySelector("button"),
           () => API.post(`/api/proyectos/${id}/participantes`, { usuario_id }), "Participante agregado", { form });
         if (ok) recargar();
+      });
+    },
+  };
+}
+
+// HU-02-003: un cambio del plan con valor anterior, nuevo, actor y fecha
+const CAMPOS_PROYECTO = { nombre: "Nombre", objetivo: "Objetivo", responsable_id: "Responsable",
+                          fecha_inicio: "Fecha de inicio", fecha_fin: "Fecha de fin" };
+
+function valorCambioProyecto(h, cual) {
+  if (h.campo === "responsable_id") return escapar(h[`${cual}_nombre`]);
+  const valor = h[`valor_${cual}`];
+  return h.campo.startsWith("fecha_") ? fecha(valor) : escapar(valor);
+}
+
+function cambioProyecto(h) {
+  return `
+    <li>
+      <p><span class="etiqueta-campo">${escapar(CAMPOS_PROYECTO[h.campo] || h.campo)}</span>
+        <span class="valor-anterior">${valorCambioProyecto(h, "anterior")}</span> → ${valorCambioProyecto(h, "nuevo")}</p>
+      <p class="meta">${escapar(h.actor_nombre)} · ${momento(h.creado_en)}</p>
+    </li>`;
+}
+
+// HU-02-003 Actualizar datos del proyecto (solo su responsable)
+async function vistaEditarProyecto(id) {
+  const p = await API.get(`/api/proyectos/${id}`);
+  if (!p.soy_responsable) throw sinAcceso();
+  const usuarios = await API.get("/api/usuarios");
+  const responsables = usuarios.filter((x) => FUNCIONES_CREAN_PROYECTO.includes(x.funcion));
+  if (!responsables.some((r) => r.id === p.responsable_id)) {
+    responsables.unshift({ id: p.responsable_id, nombre: p.responsable_nombre });
+  }
+  return {
+    titulo: `Editar · ${p.nombre}`,
+    seccion: "proyectos",
+    foco: "campo",
+    migas: [{ texto: "Mis proyectos", href: "#/proyectos" }, { texto: p.nombre, href: `#/proyectos/${p.id}` },
+            { texto: "Editar" }],
+    html: `
+      <div class="hoja">
+        <h1 tabindex="-1">Editar proyecto</h1>
+        <form id="f-editar-proyecto" class="formulario">
+          <label>Nombre <input name="nombre" required maxlength="120" value="${escapar(p.nombre)}"></label>
+          <label>Objetivo <textarea name="objetivo" required rows="3" maxlength="1000">${escapar(p.objetivo)}</textarea></label>
+          <label>Responsable
+            <select name="responsable_id" required>
+              ${responsables.map((r) => `<option value="${Number(r.id)}" ${r.id === p.responsable_id ? "selected" : ""}>${escapar(r.nombre)}</option>`).join("")}
+            </select>
+          </label>
+          <div class="fila">
+            <label>Fecha de inicio <input type="date" name="fecha_inicio" required value="${escapar(p.fecha_inicio)}"></label>
+            <label>Fecha de fin <input type="date" name="fecha_fin" required value="${escapar(p.fecha_fin)}"></label>
+          </div>
+          <p class="pista-campo">Si cambias el responsable, dejarás de administrar este proyecto; seguirás como participante.</p>
+          <div class="acciones-form">
+            <button class="boton">Guardar cambios</button>
+            <a class="boton secundario" href="#/proyectos/${p.id}">Cancelar</a>
+          </div>
+        </form>
+      </div>`,
+    montar() {
+      const form = document.getElementById("f-editar-proyecto");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        Formularios.limpiarErrores(form);
+        const d = datosForm(form);
+        if (d.fecha_fin < d.fecha_inicio) {
+          Formularios.marcarErrores(form, { fecha_fin: "No puede ser anterior a la fecha de inicio" });
+          toast("La fecha de fin no puede ser anterior a la de inicio", "error");
+          return;
+        }
+        d.responsable_id = Number(d.responsable_id);
+        const ok = await guardar(form.querySelector("button"), () => API.put(`/api/proyectos/${id}`, d),
+          "Proyecto actualizado", { form, campoDe: campoDelError });
+        if (ok) {
+          cargarProyectos();
+          location.hash = `#/proyectos/${id}`;
+        }
       });
     },
   };

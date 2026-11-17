@@ -35,6 +35,38 @@ def obtener_con_responsable(db, proyecto_id: int) -> Optional[dict]:
                        WHERE p.id = :id""", id=proyecto_id)
 
 
+CAMPOS_EDITABLES = ("nombre", "objetivo", "responsable_id", "fecha_inicio", "fecha_fin")
+
+
+def actualizar(db, proyecto_id: int, valores: dict) -> None:
+    """Actualiza solo los campos recibidos (nombres validados contra CAMPOS_EDITABLES)."""
+    campos = [c for c in valores if c in CAMPOS_EDITABLES]
+    db.execute(text(f"UPDATE proyectos SET {', '.join(f'{c} = :{c}' for c in campos)} WHERE id = :id"),
+               {**{c: valores[c] for c in campos}, "id": proyecto_id})
+
+
+def registrar_cambio(db, proyecto_id: int, campo: str, anterior, nuevo, actor_id: int) -> None:
+    db.execute(
+        text("""INSERT INTO historial_proyectos (proyecto_id, campo, valor_anterior, valor_nuevo, actor_id)
+                VALUES (:p, :campo, :ant, :nuevo, :actor)"""),
+        {"p": proyecto_id, "campo": campo, "actor": actor_id,
+         "ant": None if anterior is None else str(anterior), "nuevo": None if nuevo is None else str(nuevo)},
+    )
+
+
+def listar_historial(db, proyecto_id: int) -> list:
+    """Cambios en orden cronológico; para el responsable se devuelven también los nombres."""
+    return varios(db, """SELECT h.id, h.campo, h.valor_anterior, h.valor_nuevo, h.creado_en,
+                                 a.nombre AS actor_nombre,
+                                 CASE WHEN h.campo = 'responsable_id' THEN ua.nombre END AS anterior_nombre,
+                                 CASE WHEN h.campo = 'responsable_id' THEN un.nombre END AS nuevo_nombre
+                          FROM historial_proyectos h
+                          JOIN usuarios a       ON a.id = h.actor_id
+                          LEFT JOIN usuarios ua ON ua.id = h.valor_anterior
+                          LEFT JOIN usuarios un ON un.id = h.valor_nuevo
+                          WHERE h.proyecto_id = :p ORDER BY h.id""", p=proyecto_id)
+
+
 def es_participante(db, proyecto_id: int, usuario_id: int) -> bool:
     return uno(db, """SELECT 1 FROM participantes
                        WHERE proyecto_id = :p AND usuario_id = :u AND activo = 1""",

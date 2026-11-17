@@ -87,6 +87,15 @@
 .lista-personas .boton { grid-column: 4; }
 .formulario.en-linea { max-width: 480px; }
 
+/* ---------- Cambios e historial (HU-02-003) ---------- */
+
+.lista-cambios { display: grid; border: 1px solid var(--borde); border-radius: var(--r-2); background: var(--superficie); }
+.lista-cambios > li { display: grid; gap: var(--e-1); padding: var(--e-3) var(--e-4); }
+.lista-cambios > li + li { border-top: 1px solid var(--borde); }
+.lista-cambios p { overflow-wrap: anywhere; }
+.valor-anterior { color: var(--texto-2); }
+.pista-campo { color: var(--texto-2); font-size: var(--t-sm); }
+
 /* ---------- Tablero de tareas (HU-07-001) ---------- */
 
 .selector-vista { display: inline-flex; gap: var(--e-1); }

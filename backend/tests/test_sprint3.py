@@ -5,6 +5,7 @@ import pytest
 
 from app.core import tiempo
 
+from .helpers import crear_usuario, login
 from .test_sprint2 import crear_tarea, esc  # noqa: F401  (esc es el escenario del Sprint 2)
 
 ESTADOS = ["pendiente", "en_curso", "terminada"]
@@ -219,3 +220,54 @@ def test_solo_el_responsable_del_proyecto_replanifica(esc):
     assert replanificar(esc, esc.beto, t["id"], **plan).status_code == 403   # asignado, pero no planifica
     assert replanificar(esc, esc.carla, t["id"], **plan).status_code == 403  # sin acceso
     assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()["prioridad"] == "media"
+
+
+# HU-02-003 Actualizar datos del proyecto
+DATOS_PROYECTO = {"nombre": "Web", "objetivo": "Sitio", "fecha_inicio": "2026-11-01", "fecha_fin": "2026-12-01"}
+
+
+def editar_proyecto(e, h, **cambios):
+    return e.c.put(f"/api/proyectos/{e.pid}", headers=h,
+                   json={**DATOS_PROYECTO, "responsable_id": e.ana_id, **cambios})
+
+
+def test_actualizar_proyecto_guarda_valor_anterior_y_actor(esc):
+    r = editar_proyecto(esc, esc.ana, objetivo="Sitio nuevo", fecha_fin="2026-12-15")
+    assert r.status_code == 200, r.text
+    assert (r.json()["objetivo"], r.json()["fecha_fin"]) == ("Sitio nuevo", "2026-12-15")
+    ficha = esc.c.get(f"/api/proyectos/{esc.pid}", headers=esc.beto).json()
+    assert (ficha["objetivo"], ficha["fecha_fin"]) == ("Sitio nuevo", "2026-12-15")
+    cambios = esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.beto).json()
+    assert [(h["campo"], h["valor_anterior"], h["valor_nuevo"], h["actor_nombre"]) for h in cambios] == [
+        ("objetivo", "Sitio", "Sitio nuevo", "Ana"), ("fecha_fin", "2026-12-01", "2026-12-15", "Ana")]
+    assert all(h["creado_en"] for h in cambios)
+
+
+def test_cambiar_responsable_del_proyecto(esc):
+    dora_id = crear_usuario(esc.c, esc.adm, "dora", "Responsable")
+    dora = login(esc.c, "dora", "clave123")
+    assert esc.c.get(f"/api/proyectos/{esc.pid}", headers=dora).status_code == 403
+    r = editar_proyecto(esc, esc.ana, responsable_id=dora_id)
+    assert r.status_code == 200 and r.json()["responsable_nombre"] == "Dora" and r.json()["soy_responsable"] is False
+    assert esc.c.get(f"/api/proyectos/{esc.pid}", headers=dora).json()["soy_responsable"] is True  # obtiene acceso
+    assert esc.c.get(f"/api/proyectos/{esc.pid}", headers=esc.ana).status_code == 200  # sigue participando
+    cambio = esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=dora).json()[0]
+    assert (cambio["anterior_nombre"], cambio["nuevo_nombre"]) == ("Ana", "Dora")
+    assert editar_proyecto(esc, esc.ana, objetivo="Otro", responsable_id=dora_id).status_code == 403
+
+
+def test_actualizar_proyecto_invalido_no_cambia_nada(esc):
+    antes = esc.c.get(f"/api/proyectos/{esc.pid}", headers=esc.ana).json()
+    assert editar_proyecto(esc, esc.ana, objetivo="X", fecha_fin="2026-10-01").status_code == 400
+    assert editar_proyecto(esc, esc.ana, objetivo="X", responsable_id=esc.beto_id).status_code == 400  # Integrante
+    assert editar_proyecto(esc, esc.ana, objetivo="").status_code == 400
+    assert esc.c.get(f"/api/proyectos/{esc.pid}", headers=esc.ana).json() == antes
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.ana).json() == []
+
+
+def test_actualizar_proyecto_sin_permiso(esc):
+    assert editar_proyecto(esc, esc.beto, objetivo="X").status_code == 403   # participa pero no es responsable
+    assert editar_proyecto(esc, esc.carla, objetivo="X").status_code == 403  # sin acceso
+    assert editar_proyecto(esc, esc.adm, objetivo="X").status_code == 403    # la función no da acceso
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.carla).status_code == 403
+    assert esc.c.get(f"/api/proyectos/{esc.pid}", headers=esc.ana).json()["objetivo"] == "Sitio"

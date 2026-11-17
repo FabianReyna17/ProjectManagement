@@ -1,4 +1,4 @@
-"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001, HU-02-002, HU-08-002).
+"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001, HU-02-002, HU-02-003, HU-08-002).
 
 No importa FastAPI. Para datos de cuentas usa el servicio de acceso, nunca su repositorio.
 """
@@ -16,12 +16,16 @@ def mis_proyectos(db, usuario_id: int) -> list:
     return repo.listar_de_participante(db, usuario_id)
 
 
+MSG_FECHAS = "La fecha de fin no puede ser anterior a la de inicio"
+MSG_RESPONSABLE = "El responsable debe ser una cuenta activa con función Responsable o Admin"
+
+
 def crear(db, actor_id: int, nombre: str, objetivo: str, responsable_id: int,
           fecha_inicio: date, fecha_fin: date, clave: Optional[str] = None) -> dict:
     if fecha_fin < fecha_inicio:
-        raise DatosInvalidos("La fecha de fin no puede ser anterior a la de inicio")
+        raise DatosInvalidos(MSG_FECHAS)
     if not acceso.puede_ser_responsable(db, responsable_id):
-        raise DatosInvalidos("El responsable debe ser una cuenta activa con función Responsable o Admin")
+        raise DatosInvalidos(MSG_RESPONSABLE)
 
     def insertar() -> int:
         pid = repo.insertar(db, nombre, objetivo, responsable_id,
@@ -43,6 +47,33 @@ def obtener_autorizado(db, proyecto_id: int, usuario_id: int) -> dict:
     if not proyecto:
         raise Prohibido()
     return proyecto
+
+
+def actualizar(db, proyecto: dict, actor_id: int, nombre: str, objetivo: str, responsable_id: int,
+               fecha_inicio: date, fecha_fin: date) -> dict:
+    """HU-02-003: solo el responsable del proyecto. Cada dato que cambia queda en el historial
+    con valor anterior, actor y fecha; si algo no es válido no se guarda nada. El nuevo
+    responsable obtiene acceso si no lo tenía; el anterior sigue como participante."""
+    exigir_responsable(proyecto, actor_id)
+    if fecha_fin < fecha_inicio:
+        raise DatosInvalidos(MSG_FECHAS)
+    if responsable_id != proyecto["responsable_id"] and not acceso.puede_ser_responsable(db, responsable_id):
+        raise DatosInvalidos(MSG_RESPONSABLE)
+    nuevos = {"nombre": nombre, "objetivo": objetivo, "responsable_id": responsable_id,
+              "fecha_inicio": fecha_inicio.isoformat(), "fecha_fin": fecha_fin.isoformat()}
+    cambios = [(campo, proyecto[campo], valor) for campo, valor in nuevos.items() if proyecto[campo] != valor]
+    if cambios:
+        with transaccion(db):
+            repo.actualizar(db, proyecto["id"], {campo: valor for campo, _, valor in cambios})
+            for campo, anterior, nuevo in cambios:
+                repo.registrar_cambio(db, proyecto["id"], campo, anterior, nuevo, actor_id)
+            if not repo.es_participante(db, proyecto["id"], responsable_id):
+                repo.activar_participante(db, proyecto["id"], responsable_id)
+    return ficha(repo.obtener_con_responsable(db, proyecto["id"]), actor_id)
+
+
+def historial(db, proyecto: dict) -> list:
+    return repo.listar_historial(db, proyecto["id"])
 
 
 def es_participante(db, proyecto_id: int, usuario_id: int) -> bool:

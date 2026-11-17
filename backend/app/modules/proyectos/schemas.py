@@ -13,5 +13,9 @@ class ProyectoIn(Base):
     fecha_fin: date
 
 
+class ProyectoEditarIn(ProyectoIn):
+    """HU-02-003: se envían todos los datos; solo se guardan los que cambian."""
+
+
 class ParticipanteIn(Base):
     usuario_id: int

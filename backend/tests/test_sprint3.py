@@ -322,3 +322,40 @@ def test_reasignar_conserva_los_avances_previos(esc):
     lista_avances = esc.c.get(f"/api/tareas/{t['id']}/avances", headers=esc.ana).json()
     assert [(a["texto"], a["autor_nombre"]) for a in lista_avances] == [("Primer avance de Beto", "Beto")]
     assert avance(esc, esc.beto, t["id"], "Otro").status_code == 403  # ya no está asignado
+
+
+# HU-04-006 Historial de una tarea
+def test_historial_muestra_cada_tipo_de_cambio_en_orden(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    cambiar_estado(esc, esc.beto, t["id"], "en_curso")
+    avance(esc, esc.beto, t["id"], "Mitad hecha")
+    esc.c.post(f"/api/tareas/{t['id']}/bloqueos", headers=esc.beto, json={"motivo": "Falta el logo"})
+    bloqueo = esc.c.get(f"/api/tareas/{t['id']}/bloqueos", headers=esc.ana).json()[0]
+    esc.c.post(f"/api/tareas/{t['id']}/bloqueos/{bloqueo['id']}/resolver", headers=esc.ana,
+               json={"resolucion": "Llegó el logo"})
+    replanificar(esc, esc.ana, t["id"], responsable_id=esc.ana_id, fecha_limite="2026-11-30", prioridad="alta")
+
+    entradas = historial(esc, esc.ana, t["id"])
+    assert [(h["tipo"], h["valor_anterior"], h["valor_nuevo"], h["actor_nombre"]) for h in entradas] == [
+        ("responsable", None, str(esc.beto_id), "Ana"),
+        ("estado", "pendiente", "en_curso", "Beto"),
+        ("avance", None, "Mitad hecha", "Beto"),
+        ("bloqueo", None, "Falta el logo", "Beto"),
+        ("resolucion_bloqueo", "Falta el logo", "Llegó el logo", "Ana"),
+        ("responsable", str(esc.beto_id), str(esc.ana_id), "Ana"),
+        ("fecha_limite", None, "2026-11-30", "Ana"),
+        ("prioridad", "media", "alta", "Ana"),
+    ]
+    assert all(h["creado_en"] for h in entradas)
+    assert [h["id"] for h in entradas] == sorted(h["id"] for h in entradas)
+    # la reasignación no borra lo anterior y el historial lo ven todos los participantes
+    assert historial(esc, esc.beto, t["id"]) == entradas
+    assert (entradas[5]["anterior_nombre"], entradas[5]["nuevo_nombre"]) == ("Beto", "Ana")
+
+
+def test_historial_sin_acceso_por_enlace_directo(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    assert esc.c.get(f"/api/tareas/{t['id']}/historial", headers=esc.carla).status_code == 403
+    assert esc.c.get("/api/tareas/9999/historial", headers=esc.ana).status_code == 403
+    assert esc.c.delete(f"/api/proyectos/{esc.pid}/participantes/{esc.beto_id}", headers=esc.ana).status_code == 200
+    assert esc.c.get(f"/api/tareas/{t['id']}/historial", headers=esc.beto).status_code == 403  # perdió el acceso

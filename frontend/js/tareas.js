@@ -158,6 +158,35 @@ async function vistaNuevaTarea(pid) {
   };
 }
 
+// HU-04-006: cada entrada del historial en orden cronológico, con actor y fecha
+function valorHistorial(h, cual) {
+  const valor = h[`valor_${cual}`];
+  switch (h.tipo) {
+    case "responsable": return h[`${cual}_nombre`] ? escapar(h[`${cual}_nombre`]) : "Sin asignar";
+    case "fecha_limite": return fecha(valor, "Sin fecha");
+    case "prioridad": return escapar(PRIORIDADES[valor] || valor);
+    case "estado": return escapar(ESTADOS_TAREA[valor] || valor);
+    default: return escapar(valor);
+  }
+}
+
+const TEXTO_HISTORIAL = {
+  responsable: "Responsable", fecha_limite: "Fecha límite", prioridad: "Prioridad", estado: "Estado",
+  avance: "Registró un avance", bloqueo: "Reportó un bloqueo", resolucion_bloqueo: "Resolvió el bloqueo",
+};
+
+function entradaHistorial(h) {
+  const titulo = escapar(TEXTO_HISTORIAL[h.tipo] || h.tipo);
+  const cuerpo = ["avance", "bloqueo", "resolucion_bloqueo"].includes(h.tipo)
+    ? `<span class="etiqueta-campo">${titulo}</span><span class="texto-largo">${valorHistorial(h, "nuevo")}</span>`
+    : `<span class="etiqueta-campo">${titulo}</span><span class="valor-anterior">${valorHistorial(h, "anterior")}</span> → ${valorHistorial(h, "nuevo")}`;
+  return `
+    <li>
+      <p>${cuerpo}</p>
+      <p class="meta">${escapar(h.actor_nombre)} · ${momento(h.creado_en)}</p>
+    </li>`;
+}
+
 function itemAvance(a) {
   return `
     <li>
@@ -179,9 +208,10 @@ function bloqueoResuelto(b) {
 // Detalle de una tarea: contenido a la izquierda, propiedades a la derecha (inspector)
 async function vistaTarea(id) {
   const t = await API.get(`/api/tareas/${id}`);
-  const [participantes, bloqueos, avances] = await Promise.all([
+  const [participantes, bloqueos, avances, cambios] = await Promise.all([
     t.puedo_planificar ? API.get(`/api/proyectos/${t.proyecto_id}/participantes`) : [],
     API.get(`/api/tareas/${id}/bloqueos`), API.get(`/api/tareas/${id}/avances`),
+    API.get(`/api/tareas/${id}/historial`),
   ]);
   const resueltos = bloqueos.filter((b) => b.resuelto_en).reverse();
   const puedeEstado = t.transiciones.length || t.puedo_bloquear;
@@ -239,6 +269,13 @@ async function vistaTarea(id) {
             <h2 class="titulo-seccion">Bloqueos resueltos <span class="conteo">${resueltos.length}</span></h2>
             <ul class="lista-bloqueos">${resueltos.map(bloqueoResuelto).join("")}</ul>
           </section>` : ""}
+
+          <section class="bloque" aria-labelledby="titulo-historial">
+            <h2 class="titulo-seccion" id="titulo-historial">Historial <span class="conteo">${cambios.length}</span></h2>
+            ${cambios.length
+              ? `<ol class="lista-cambios historial">${cambios.map(entradaHistorial).join("")}</ol>`
+              : `<p class="tenue">Sin cambios desde que se creó.</p>`}
+          </section>
         </div>
 
         <aside class="inspector" aria-label="Propiedades de la tarea">

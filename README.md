@@ -75,6 +75,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 2 | HU-04-003 | Registrar bloqueo con motivo; una tarea bloqueada no se puede terminar — `POST /api/tareas/{id}/bloqueos` |
 | 2 | HU-04-004 | Resolver bloqueo (solo el responsable) con explicación — `POST /api/tareas/{id}/bloqueos/{bid}/resolver` |
 | 2 | HU-08-002 | `Idempotency-Key` en las creaciones: un reintento no duplica el registro |
+| 3 | HU-07-001 | Tablero con una columna por estado (mismas tareas y orden que la lista), cambio de estado desde la tarjeta; selector Lista/Tablero que se recuerda — `GET /api/proyectos/{id}/tablero` |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 
@@ -105,4 +106,4 @@ Al llegar la historia que lo necesite:
 
 ## Siguientes sprints
 
-Tablero, vencimientos, filtros, replanificación, control de versión, historial visible de la tarea, avisos, comentarios, edición de proyectos, desactivar cuentas y respaldos.
+Vencimientos, filtros, replanificación, control de versión, historial visible de la tarea, avisos, comentarios, edición de proyectos, desactivar cuentas y respaldos.

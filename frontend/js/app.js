@@ -87,7 +87,7 @@ function claveFoco(el) {
   if (!el || !app.contains(el) || el === app) return null;
   if (el.id) return `#${CSS.escape(el.id)}`;
   if (el.dataset.accion) {
-    return ["accion", "id", "estado"].filter((k) => el.dataset[k])
+    return ["accion", "id", "estado", "vista"].filter((k) => el.dataset[k])
       .map((k) => `[data-${k}="${CSS.escape(el.dataset[k])}"]`).join("");
   }
   if (el.name && el.form?.id) return `#${CSS.escape(el.form.id)} [name="${CSS.escape(el.name)}"]`;
@@ -206,8 +206,8 @@ document.addEventListener("click", (e) => {
     ACCIONES[el.dataset.accion](el, e);
     return;
   }
-  // La fila entera abre su elemento; el enlace del nombre sigue siendo lo accesible por teclado
-  const fila = e.target.closest("tr[data-href]");
+  // La fila (o tarjeta) entera abre su elemento; el enlace del nombre sigue siendo lo accesible por teclado
+  const fila = e.target.closest("[data-href]");
   if (fila && !e.target.closest("a, button, input, select, textarea, label")) {
     if (e.ctrlKey || e.metaKey) window.open(fila.dataset.href);
     else location.hash = fila.dataset.href;
@@ -424,13 +424,15 @@ async function vistaNuevoProyecto() {
   };
 }
 
-// HU-02-002 Ficha del proyecto + HU-03-005 Tareas + HU-01-005 Participantes
+// HU-02-002 Ficha del proyecto + HU-03-005 Tareas (lista o HU-07-001 tablero) + HU-01-005 Participantes
 async function vistaProyecto(id) {
   const p = await API.get(`/api/proyectos/${id}`);
-  const [participantes, tareas, usuarios] = await Promise.all([
-    API.get(`/api/proyectos/${id}/participantes`), API.get(`/api/proyectos/${id}/tareas`),
+  const modo = vistaTareasElegida();
+  const [participantes, datosTareas, usuarios] = await Promise.all([
+    API.get(`/api/proyectos/${id}/participantes`), API.get(`/api/proyectos/${id}/${modo}`),
     p.soy_responsable ? API.get("/api/usuarios") : [],
   ]);
+  const tareas = modo === "tablero" ? datosTareas.columnas.flatMap((c) => c.tareas) : datosTareas;
   const ids = new Set(participantes.map((x) => x.id));
   const candidatos = usuarios.filter((x) => !ids.has(x.id));
   Estado.tareasProyecto = { pid: p.id, nombre: p.nombre, tareas };
@@ -469,14 +471,17 @@ async function vistaProyecto(id) {
         <div class="encabezado-seccion">
           <h2 class="titulo-seccion" id="titulo-tareas">Tareas
             <span class="conteo" data-conteo="tabla-tareas" data-total="${resumen}">${resumen}</span></h2>
-          ${tareas.length ? buscadorTabla("tabla-tareas", "Buscar tarea") : ""}
+          ${tareas.length ? `<div class="encabezado-acciones">
+            ${modo === "lista" ? buscadorTabla("tabla-tareas", "Buscar tarea") : ""}
+            ${selectorVistaTareas(modo)}
+          </div>` : ""}
         </div>
-        ${tablaTareas(tareas, {
-          vacioHtml: p.soy_responsable
+        ${tareas.length === 0
+          ? (p.soy_responsable
             ? vacio("Este proyecto no tiene tareas", "Divide el objetivo en tareas y asígnalas al equipo.",
                 `<a class="boton" href="${nuevaTarea}">${icono("mas")}Crear la primera tarea</a>`)
-            : vacio("Este proyecto no tiene tareas", "El responsable del proyecto aún no ha creado ninguna."),
-        })}
+            : vacio("Este proyecto no tiene tareas", "El responsable del proyecto aún no ha creado ninguna."))
+          : modo === "tablero" ? tableroTareas(datosTareas.columnas) : tablaTareas(tareas)}
       </section>
 
       <section class="bloque" aria-labelledby="titulo-participantes">

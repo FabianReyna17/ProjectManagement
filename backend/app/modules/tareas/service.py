@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003, HU-04-004, HU-08-002).
+"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003, HU-04-004, HU-07-001, HU-08-002).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -93,6 +93,17 @@ def _lista(tareas: list) -> list:
 def listar_de_proyecto(db, proyecto: dict) -> list:
     """HU-03-005: tareas del proyecto (ya autorizado); responsable_id null = sin asignar."""
     return _lista(repo.listar_de_proyecto(db, proyecto["id"]))
+
+
+def tablero(db, proyecto: dict, usuario_id: int) -> dict:
+    """HU-07-001: las mismas tareas y en el mismo orden que la lista del proyecto, en una
+    columna por estado. Cada tarjeta trae las transiciones que este usuario puede hacer."""
+    columnas = [{"estado": e, "nombre": n, "tareas": []} for e, n in NOMBRE_ESTADO.items()]
+    por_estado = {c["estado"]: c["tareas"] for c in columnas}
+    for t in listar_de_proyecto(db, proyecto):
+        puede = usuario_id in (t["responsable_id"], proyecto["responsable_id"])
+        por_estado[t["estado"]].append({**t, "transiciones": _transiciones(t) if puede else []})
+    return {"columnas": columnas}
 
 
 def mis_tareas(db, usuario_id: int) -> list:

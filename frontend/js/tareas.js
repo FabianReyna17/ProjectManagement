@@ -32,6 +32,58 @@ function tablaTareas(tareas, { id = "tabla-tareas", conProyecto = false, conAcci
     </div>`;
 }
 
+// ---------- HU-07-001 Tablero de tareas ----------
+
+// El valor es también el recurso de la API: /api/proyectos/{id}/tareas o /tablero
+const VISTAS_TAREAS = { tareas: { texto: "Lista", icono: "lista" }, tablero: { texto: "Tablero", icono: "tablero" } };
+
+function vistaTareasElegida() {
+  const v = almacen.leer("vista-tareas");
+  return v in VISTAS_TAREAS ? v : "tareas";
+}
+
+function selectorVistaTareas(actual) {
+  return `<div class="selector-vista" role="group" aria-label="Ver tareas como">${Object.entries(VISTAS_TAREAS).map(([v, x]) => `
+    <button type="button" class="boton chico ${v === actual ? "" : "secundario"}" data-accion="vista-tareas"
+            data-vista="${v}" aria-pressed="${v === actual}">${icono(x.icono)}${x.texto}</button>`).join("")}</div>`;
+}
+
+ACCIONES["vista-tareas"] = (btn) => {
+  if (btn.getAttribute("aria-pressed") === "true") return;
+  almacen.guardar("vista-tareas", btn.dataset.vista);
+  recargar();
+};
+
+/** Una columna por estado; las tarjetas llegan del servidor en el mismo orden que la lista. */
+function tableroTareas(columnas) {
+  return `
+    <div class="tablero">
+      ${columnas.map((c) => `
+        <section class="columna-tablero" aria-labelledby="columna-${escapar(c.estado)}">
+          <h3 class="columna-titulo" id="columna-${escapar(c.estado)}">
+            ${etiquetaEstado(c.estado)}<span class="conteo">${c.tareas.length}<span class="solo-lector"> tarea${c.tareas.length === 1 ? "" : "s"}</span></span>
+          </h3>
+          ${c.tareas.length
+            ? `<ul class="lista-tarjetas">${c.tareas.map(tarjetaTarea).join("")}</ul>`
+            : `<p class="columna-vacia">Sin tareas</p>`}
+        </section>`).join("")}
+    </div>`;
+}
+
+function tarjetaTarea(t) {
+  return `
+    <li class="tarjeta-tarea${t.bloqueada ? " tarjeta-bloqueada" : ""}" data-href="#/tareas/${Number(t.id)}">
+      <a class="tarjeta-nombre" href="#/tareas/${Number(t.id)}">${escapar(t.nombre)}</a>
+      ${t.bloqueada ? `<div>${etiquetaBloqueo()}</div>` : ""}
+      <div class="tarjeta-datos">
+        ${etiquetaPrioridad(t.prioridad)}
+        <span class="num">${fecha(t.fecha_limite, "Sin fecha")}</span>
+      </div>
+      <div>${t.responsable_nombre ? persona(t.responsable_nombre) : sinAsignar()}</div>
+      ${t.transiciones.length ? `<div class="acciones">${botonesEstado(t.id, t.estado, t.transiciones)}</div>` : ""}
+    </li>`;
+}
+
 // HU-03-004 Consultar mis tareas (de todos mis proyectos con acceso)
 async function vistaMisTareas() {
   const tareas = await API.get("/api/mis-tareas");

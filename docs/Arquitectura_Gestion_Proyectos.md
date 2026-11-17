@@ -2,6 +2,8 @@
 
 **Revisión:** 30 de octubre de 2026. **Estado:** propuesta técnica para discusión del equipo. La arquitectura objetivo todavía no está implementada.
 
+> **Estado al Sprint 2 (17 de noviembre de 2026).** El desarrollo sigue esta propuesta. Ya está resuelto: backend separado en los módulos `acceso`, `proyectos` y `tareas` (router → service → repository, con reglas probadas sin HTTP); SQLAlchemy con la transacción en el servicio; migraciones con Alembic (0001–0007) en lugar de `CREATE TABLE IF NOT EXISTS`; sesiones que expiran por inactividad; freno a intentos fallidos de inicio de sesión; idempotencia de las creaciones (HU-08-002) e historial de tareas en la misma transacción; interfaz repartida en varios archivos; 42 pruebas automatizadas en verde. Sigue pendiente lo listado en el README, sección "Pendientes técnicos". Las secciones siguientes conservan el análisis original sobre el código del Sprint 1.
+
 La base actual permite demostrar el primer recorrido de acceso y proyectos. Para convertirla en un producto mantenible recomiendo un **monolito modular con FastAPI**, reglas de negocio separadas de HTTP y persistencia, migraciones y un despliegue reproducible. El mayor beneficio inmediato es poder añadir tareas, historial y avisos sin repartir las mismas reglas entre varias rutas y pantallas.
 
 Se revisaron el código del Sprint 1, las pruebas existentes, el flujo de GitHub Actions, README, descripción general en Word, épicas, story mapping, planificación y las dos fotografías. Los documentos de producto se presentan como propuestas pendientes de validación; no equivalen a acuerdos comerciales. Las anotaciones de las fotos se consideran evidencia de requisitos, no instrucciones para ejecutar acciones.

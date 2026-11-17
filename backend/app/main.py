@@ -36,7 +36,7 @@ async def error_validacion(request: Request, exc: RequestValidationError):
 @app.exception_handler(ErrorNegocio)
 async def error_negocio(request: Request, exc: ErrorNegocio):
     """Traduce los errores de los servicios a HTTP con el mismo formato de siempre."""
-    return JSONResponse(status_code=codigo_http(exc), content={"detail": exc.mensaje})
+    return JSONResponse(status_code=codigo_http(exc), content={"detail": exc.mensaje, **exc.datos})
 
 
 # La interfaz no usa scripts ni estilos en línea, por eso la política puede ser estricta.

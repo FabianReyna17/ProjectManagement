@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Optional
 
 from pydantic import Field
 
@@ -14,7 +15,9 @@ class ProyectoIn(Base):
 
 
 class ProyectoEditarIn(ProyectoIn):
-    """HU-02-003: se envían todos los datos; solo se guardan los que cambian."""
+    """HU-02-003: se envían todos los datos; solo se guardan los que cambian.
+    HU-08-003: `anteriores` son los valores que se leyeron al abrir el formulario."""
+    anteriores: Optional[ProyectoIn] = None
 
 
 class ParticipanteIn(Base):

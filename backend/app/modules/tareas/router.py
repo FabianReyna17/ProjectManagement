@@ -66,13 +66,14 @@ def planificar_tarea(data: PlanificacionIn, tarea: dict = Depends(tarea_autoriza
 @router.put("/tareas/{tarea_id}/plan")
 def replanificar_tarea(data: ReplanificarIn, tarea: dict = Depends(tarea_autorizada),
                        u: dict = Depends(usuario_actual), db=Depends(get_db)):
-    return service.replanificar(db, tarea, u["id"], data.responsable_id, data.fecha_limite, data.prioridad)
+    return service.replanificar(db, tarea, u["id"], data.responsable_id, data.fecha_limite, data.prioridad,
+                                data.anteriores.model_dump() if data.anteriores else None)
 
 
 @router.put("/tareas/{tarea_id}/estado")
 def cambiar_estado(data: EstadoIn, tarea: dict = Depends(tarea_autorizada),
                    u: dict = Depends(usuario_actual), db=Depends(get_db)):
-    return service.cambiar_estado(db, tarea, u["id"], data.estado)
+    return service.cambiar_estado(db, tarea, u["id"], data.estado, data.anterior)
 
 
 @router.post("/tareas/{tarea_id}/avances", status_code=201)

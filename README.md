@@ -77,12 +77,13 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 2 | HU-04-004 | Resolver bloqueo (solo el responsable) con explicación — `POST /api/tareas/{id}/bloqueos/{bid}/resolver` |
 | 2 | HU-08-002 | `Idempotency-Key` en las creaciones: un reintento no duplica el registro |
 | 3 | HU-07-001 | Tablero con una columna por estado (mismas tareas y orden que la lista), cambio de estado desde la tarjeta; selector Lista/Tablero que se recuerda — `GET /api/proyectos/{id}/tablero` |
-| 3 | HU-02-003 | Editar nombre, objetivo, responsable y fechas del proyecto (solo su responsable); cada cambio guarda valor anterior, actor y fecha y se ve en "Cambios del plan"; el nuevo responsable obtiene acceso — `PUT /api/proyectos/{id}`, `GET /api/proyectos/{id}/historial` |
-| 3 | HU-03-006 | Replanificar responsable, prioridad y fecha en una sola confirmación; cada valor que cambia queda en el historial y si algo es inválido no se guarda nada — `PUT /api/tareas/{id}/plan` |
-| 3 | HU-04-002 | Avances de la tarea con texto, autor y fecha (la persona asignada o el responsable), en orden y separados de los cambios de estado; reasignar no los borra — `POST/GET /api/tareas/{id}/avances` |
-| 3 | HU-04-006 | Sección "Historial" en el detalle: responsable, fecha, prioridad, estado, avances, bloqueos y resoluciones en orden, con actor y fecha; sin acceso al proyecto no se puede consultar — `GET /api/tareas/{id}/historial` |
-| 3 | HU-07-002 | Filtros por estado, responsable (o sin asignar), prioridad y vencimiento en la lista y el tablero; se combinan, se indican los activos y se quitan con un botón; los aplica el servidor dentro del proyecto autorizado — `?estado=&responsable=&prioridad=&vencimiento=` |
 | 3 | HU-04-005 | Marca "Vencida" o "Vence hoy / mañana / en N días" (hasta 3 días antes) en lista, tablero, "Mis tareas" y detalle; se calcula con el día de Guatemala y no aplica a tareas terminadas |
+| 3 | HU-03-006 | Replanificar responsable, prioridad y fecha en una sola confirmación; cada valor que cambia queda en el historial y si algo es inválido no se guarda nada — `PUT /api/tareas/{id}/plan` |
+| 3 | HU-02-003 | Editar nombre, objetivo, responsable y fechas del proyecto (solo su responsable); cada cambio guarda valor anterior, actor y fecha y se ve en "Cambios del plan"; el nuevo responsable obtiene acceso — `PUT /api/proyectos/{id}`, `GET /api/proyectos/{id}/historial` |
+| 3 | HU-04-002 | Avances de la tarea con texto, autor y fecha (la persona asignada o el responsable), en orden y separados de los cambios de estado; reasignar no los borra — `POST/GET /api/tareas/{id}/avances` |
+| 3 | HU-07-002 | Filtros por estado, responsable (o sin asignar), prioridad y vencimiento en la lista y el tablero; se combinan, se indican los activos y se quitan con un botón; los aplica el servidor dentro del proyecto autorizado — `?estado=&responsable=&prioridad=&vencimiento=` |
+| 3 | HU-08-003 | El plan de la tarea, su estado y los datos del proyecto se guardan campo por campo solo si nadie cambió ese dato desde que se leyó (UPDATE condicional). Si hubo cambio: 409 con el valor vigente, se avisa, lo escrito se conserva y se puede volver a confirmar; cambios en datos distintos no chocan |
+| 3 | HU-04-006 | Sección "Historial" en el detalle: responsable, fecha, prioridad, estado, avances, bloqueos y resoluciones en orden, con actor y fecha; sin acceso al proyecto no se puede consultar — `GET /api/tareas/{id}/historial` |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 
@@ -113,4 +114,4 @@ Al llegar la historia que lo necesite:
 
 ## Siguientes sprints
 
-Control de versión, avisos, comentarios, desactivar cuentas y respaldos.
+Avisos, comentarios, desactivar cuentas y respaldos.

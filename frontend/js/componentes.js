@@ -73,15 +73,46 @@ function transicionesPosibles(estado, bloqueada) {
 function botonesEstado(tareaId, actual, permitidas = TRANSICIONES[actual] || []) {
   return permitidas.map((e) => `
     <button type="button" class="boton chico ${e === "terminada" ? "" : "secundario"}"
-            data-accion="estado" data-id="${Number(tareaId)}" data-estado="${escapar(e)}">
+            data-accion="estado" data-id="${Number(tareaId)}" data-estado="${escapar(e)}" data-anterior="${escapar(actual)}">
       ${escapar(ACCION_ESTADO[`${actual}>${e}`] || ESTADOS_TAREA[e])}</button>`).join("");
 }
 
+// HU-08-003: se envía el estado que se veía; si otra persona lo cambió, se avisa y se muestra el vigente
 ACCIONES.estado = async (btn) => {
   const ok = await guardar(btn,
-    () => API.put(`/api/tareas/${btn.dataset.id}/estado`, { estado: btn.dataset.estado }), "Estado actualizado");
+    () => API.put(`/api/tareas/${btn.dataset.id}/estado`, { estado: btn.dataset.estado, anterior: btn.dataset.anterior }),
+    "Estado actualizado", { alConflicto: () => recargar() });
   if (ok) recargar();
 };
+
+// ---------- HU-08-003 Cambios de otra persona ----------
+
+/** Valores leídos al abrir un formulario: se envían como "anteriores" al guardar. */
+function leidos(form) {
+  try { return JSON.parse(form.dataset.anteriores || "null"); } catch { return null; }
+}
+
+/**
+ * El cambio no se aplicó porque otra persona cambió el mismo dato. Lo escrito se conserva y
+ * los valores leídos pasan a ser los vigentes: guardar de nuevo aplica el cambio a sabiendas.
+ */
+function mostrarConflicto(form, error, describir) {
+  const { campos = [], vigente = {} } = error.datos || {};
+  const previos = leidos(form) || {};
+  form.dataset.anteriores = JSON.stringify(Object.fromEntries(Object.keys(previos).map((k) => [k, vigente[k] ?? null])));
+  form.querySelector(".nota-conflicto")?.remove();
+  const nota = document.createElement("div");
+  nota.className = "nota nota-conflicto";
+  nota.setAttribute("role", "alert");
+  nota.innerHTML = `${icono("aviso")}<div>
+    <p><strong>Otra persona cambió este dato mientras editabas.</strong> Tu cambio no se guardó.</p>
+    <p>Valor vigente: ${campos.map((c) => describir(c, vigente)).join(" · ")}</p>
+    <p>Lo que escribiste sigue aquí: guarda de nuevo para aplicarlo o descártalo.</p>
+    <button type="button" class="boton chico secundario" data-accion="recargar">Descartar y ver lo vigente</button>
+  </div>`;
+  const boton = form.querySelector("button:not([type=button])");
+  (boton.closest(".acciones-form") || boton).before(nota);
+}
 
 // ---------- Personas ----------
 

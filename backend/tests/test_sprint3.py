@@ -4,6 +4,9 @@ from datetime import date, datetime, timezone
 import pytest
 
 from app.core import tiempo
+from app.core.errors import Conflicto
+from app.db.database import get_engine
+from app.modules.tareas import service as tareas
 
 from .helpers import crear_usuario, login
 from .test_sprint2 import crear_tarea, esc  # noqa: F401  (esc es el escenario del Sprint 2)
@@ -423,3 +426,83 @@ def test_filtro_con_valor_desconocido(varias):
     for filtros in ({"estado": "cerrada"}, {"prioridad": "urgente"}, {"responsable": "beto"},
                     {"vencimiento": "pronto"}):
         assert varias.c.get(url, headers=varias.ana, params=filtros).status_code == 400
+
+
+# HU-08-003 Evitar sobrescribir cambios ajenos
+def plan_leido(e, h, tid):
+    t = e.c.get(f"/api/tareas/{tid}", headers=h).json()
+    return {k: t[k] for k in ("responsable_id", "fecha_limite", "prioridad")}
+
+
+def test_mismo_dato_de_la_tarea_da_conflicto_y_no_se_pisa(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id, fecha_limite="2026-11-20")
+    leido = plan_leido(esc, esc.ana, t["id"])                     # pestaña 1 abre el formulario
+    replanificar(esc, esc.ana, t["id"], **{**leido, "fecha_limite": "2026-11-25"},
+                 anteriores=leido)                                 # pestaña 2 guarda primero
+    r = replanificar(esc, esc.ana, t["id"], **{**leido, "fecha_limite": "2026-12-01"}, anteriores=leido)
+    assert r.status_code == 409
+    assert r.json()["campos"] == ["fecha_limite"]
+    assert r.json()["vigente"]["fecha_limite"] == "2026-11-25" and r.json()["vigente"]["responsable_nombre"] == "Beto"
+    assert plan_leido(esc, esc.ana, t["id"])["fecha_limite"] == "2026-11-25"   # no se sobrescribió
+
+    # tras revisar el valor vigente, se vuelve a confirmar y ambos cambios quedan en el historial
+    vigente = plan_leido(esc, esc.ana, t["id"])
+    r = replanificar(esc, esc.ana, t["id"], **{**vigente, "fecha_limite": "2026-12-01"}, anteriores=vigente)
+    assert r.status_code == 200 and r.json()["fecha_limite"] == "2026-12-01"
+    fechas = [(h["valor_anterior"], h["valor_nuevo"]) for h in historial(esc, esc.ana, t["id"])
+              if h["tipo"] == "fecha_limite"]
+    assert fechas == [("2026-11-20", "2026-11-25"), ("2026-11-25", "2026-12-01")]
+
+
+def test_datos_distintos_de_la_tarea_no_dan_conflicto(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id, fecha_limite="2026-11-20")
+    leido = plan_leido(esc, esc.ana, t["id"])
+    assert replanificar(esc, esc.ana, t["id"], **{**leido, "prioridad": "alta"}, anteriores=leido).status_code == 200
+    # el otro formulario sigue con la prioridad vieja, pero solo cambió la fecha
+    r = replanificar(esc, esc.ana, t["id"], **{**leido, "fecha_limite": "2026-11-30"}, anteriores=leido)
+    assert r.status_code == 200
+    assert (r.json()["prioridad"], r.json()["fecha_limite"]) == ("alta", "2026-11-30")
+
+
+def test_estado_cambiado_por_otra_persona_da_conflicto(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    cambiar_estado(esc, esc.beto, t["id"], "en_curso")
+    # Ana y Beto ven "en curso"; Beto termina primero
+    assert esc.c.put(f"/api/tareas/{t['id']}/estado", headers=esc.beto,
+                     json={"estado": "terminada", "anterior": "en_curso"}).status_code == 200
+    r = esc.c.put(f"/api/tareas/{t['id']}/estado", headers=esc.ana, json={"estado": "pendiente", "anterior": "en_curso"})
+    assert r.status_code == 409 and r.json()["vigente"] == {"estado": "terminada"}
+    assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()["estado"] == "terminada"
+    # pedir el mismo estado que ya tiene no es un conflicto
+    assert esc.c.put(f"/api/tareas/{t['id']}/estado", headers=esc.ana,
+                     json={"estado": "terminada", "anterior": "en_curso"}).status_code == 200
+
+
+def test_mismo_dato_del_proyecto_da_conflicto(esc):
+    leido = {**DATOS_PROYECTO, "responsable_id": esc.ana_id}
+    assert editar_proyecto(esc, esc.ana, objetivo="Versión A", anteriores=leido).status_code == 200
+    r = editar_proyecto(esc, esc.ana, objetivo="Versión B", anteriores=leido)
+    assert r.status_code == 409 and r.json()["campos"] == ["objetivo"] and r.json()["vigente"]["objetivo"] == "Versión A"
+    assert esc.c.get(f"/api/proyectos/{esc.pid}", headers=esc.ana).json()["objetivo"] == "Versión A"
+    # otro dato del mismo proyecto con el formulario viejo: se guarda y conserva "Versión A"
+    r = editar_proyecto(esc, esc.ana, fecha_fin="2026-12-20", anteriores=leido)
+    assert r.status_code == 200 and (r.json()["objetivo"], r.json()["fecha_fin"]) == ("Versión A", "2026-12-20")
+
+
+def test_las_fechas_se_validan_con_los_valores_vigentes(esc):
+    leido = {**DATOS_PROYECTO, "responsable_id": esc.ana_id}
+    assert editar_proyecto(esc, esc.ana, fecha_fin="2026-11-15", anteriores=leido).status_code == 200
+    # el otro formulario mueve el inicio después del fin vigente: inválido aunque su fecha_fin vieja lo permitiría
+    assert editar_proyecto(esc, esc.ana, fecha_inicio="2026-11-20", anteriores=leido).status_code == 400
+
+
+def test_dos_confirmaciones_simultaneas_no_se_pisan(esc):
+    t = crear_tarea(esc, fecha_limite="2026-11-20")
+    with get_engine().connect() as db:
+        leida = tareas.obtener_autorizada(db, t["id"], esc.ana_id)   # ambas leen la misma versión
+    replanificar(esc, esc.ana, t["id"], responsable_id=None, fecha_limite="2026-11-25", prioridad="media")
+    with get_engine().connect() as db, pytest.raises(Conflicto):
+        # la segunda confirmación llega con la versión leída: la detiene el UPDATE condicional
+        tareas.replanificar(db, leida, esc.ana_id, None, date(2026, 12, 1), "media")
+    assert plan_leido(esc, esc.ana, t["id"])["fecha_limite"] == "2026-11-25"
+    assert len([h for h in historial(esc, esc.ana, t["id"]) if h["tipo"] == "fecha_limite"]) == 1

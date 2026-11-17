@@ -581,7 +581,9 @@ async function vistaEditarProyecto(id) {
     html: `
       <div class="hoja">
         <h1 tabindex="-1">Editar proyecto</h1>
-        <form id="f-editar-proyecto" class="formulario">
+        <form id="f-editar-proyecto" class="formulario" data-anteriores="${escapar(JSON.stringify({
+          nombre: p.nombre, objetivo: p.objetivo, responsable_id: p.responsable_id,
+          fecha_inicio: p.fecha_inicio, fecha_fin: p.fecha_fin }))}">
           <label>Nombre <input name="nombre" required maxlength="120" value="${escapar(p.nombre)}"></label>
           <label>Objetivo <textarea name="objetivo" required rows="3" maxlength="1000">${escapar(p.objetivo)}</textarea></label>
           <label>Responsable
@@ -612,8 +614,11 @@ async function vistaEditarProyecto(id) {
           return;
         }
         d.responsable_id = Number(d.responsable_id);
-        const ok = await guardar(form.querySelector("button"), () => API.put(`/api/proyectos/${id}`, d),
-          "Proyecto actualizado", { form, campoDe: campoDelError });
+        d.anteriores = leidos(form);  // HU-08-003
+        const ok = await guardar(form.querySelector("button:not([type=button])"), () => API.put(`/api/proyectos/${id}`, d),
+          "Proyecto actualizado", { form, campoDe: campoDelError,
+            alConflicto: (err) => mostrarConflicto(form, err, (c, v) => `${escapar(CAMPOS_PROYECTO[c] || c)}: ${
+              c === "responsable_id" ? escapar(v.responsable_nombre) : c.startsWith("fecha_") ? fecha(v[c]) : escapar(v[c])}`) });
         if (ok) {
           cargarProyectos();
           location.hash = `#/proyectos/${id}`;

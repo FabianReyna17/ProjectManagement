@@ -212,6 +212,13 @@ async function vistaNuevaTarea(pid) {
   };
 }
 
+// HU-08-003: valor vigente de un campo del plan en el aviso de conflicto
+function describirPlan(campo, v) {
+  if (campo === "responsable_id") return `Responsable: ${v.responsable_nombre ? escapar(v.responsable_nombre) : "Sin asignar"}`;
+  if (campo === "fecha_limite") return `Fecha límite: ${fecha(v.fecha_limite, "Sin fecha")}`;
+  return `Prioridad: ${escapar(PRIORIDADES[v.prioridad] || v.prioridad)}`;
+}
+
 // HU-04-006: cada entrada del historial en orden cronológico, con actor y fecha
 function valorHistorial(h, cual) {
   const valor = h[`valor_${cual}`];
@@ -353,7 +360,8 @@ async function vistaTarea(id) {
           ${t.puedo_planificar ? `
           <section class="propiedad">
             <h2 class="propiedad-titulo">Plan</h2>
-            <form id="f-plan" class="formulario compacto">
+            <form id="f-plan" class="formulario compacto"
+                  data-anteriores="${escapar(JSON.stringify({ responsable_id: t.responsable_id, fecha_limite: t.fecha_limite, prioridad: t.prioridad }))}">
               <label>Responsable
                 <select name="responsable_id">${opcionesPersonas(participantes, t.responsable_id, "Sin asignar")}</select>
               </label>
@@ -421,9 +429,11 @@ async function vistaTarea(id) {
           responsable_id: d.responsable_id ? Number(d.responsable_id) : null,
           fecha_limite: d.fecha_limite || null,
           prioridad: d.prioridad,
+          anteriores: leidos(fPlan),  // HU-08-003
         };
-        const ok = await guardar(fPlan.querySelector("button"),
-          () => API.put(`/api/tareas/${id}/plan`, cuerpo), "Plan actualizado", { form: fPlan });
+        const ok = await guardar(fPlan.querySelector("button:not([type=button])"),
+          () => API.put(`/api/tareas/${id}/plan`, cuerpo), "Plan actualizado",
+          { form: fPlan, alConflicto: (err) => mostrarConflicto(fPlan, err, describirPlan) });
         if (ok) recargar();
       });
     },

@@ -29,16 +29,22 @@ class PlanificacionIn(Base):
     prioridad: Prioridad
 
 
-class ReplanificarIn(Base):
-    """HU-03-006: se envía el plan completo; solo se guardan los valores que cambian.
-    responsable_id null deja la tarea sin asignar; fecha_limite null, sin fecha."""
+class PlanLeido(Base):
     responsable_id: Optional[int]
     fecha_limite: Optional[date]
     prioridad: Prioridad
 
 
+class ReplanificarIn(PlanLeido):
+    """HU-03-006: se envía el plan completo; solo se guardan los valores que cambian.
+    responsable_id null deja la tarea sin asignar; fecha_limite null, sin fecha.
+    HU-08-003: `anteriores` son los valores que se leyeron al abrir el formulario."""
+    anteriores: Optional[PlanLeido] = None
+
+
 class EstadoIn(Base):
     estado: Estado
+    anterior: Optional[Estado] = None  # HU-08-003: el estado que se veía al pulsar
 
 
 class AvanceIn(Base):

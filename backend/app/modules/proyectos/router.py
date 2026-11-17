@@ -32,7 +32,8 @@ def ficha_proyecto(proyecto: dict = Depends(proyecto_autorizado), u: dict = Depe
 def actualizar_proyecto(data: ProyectoEditarIn, proyecto: dict = Depends(proyecto_autorizado),
                         u: dict = Depends(usuario_actual), db=Depends(get_db)):
     return service.actualizar(db, proyecto, u["id"], data.nombre, data.objetivo, data.responsable_id,
-                              data.fecha_inicio, data.fecha_fin)
+                              data.fecha_inicio, data.fecha_fin,
+                              data.anteriores.model_dump() if data.anteriores else None)
 
 
 @router.get("/{proyecto_id}/historial")

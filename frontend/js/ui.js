@@ -52,8 +52,9 @@ function toast(mensaje, tipo = "ok") {
  * los campos que indique el servidor y lo escrito se conserva para reintentar.
  * Un 403 deja a la persona en la vista y la recarga con sus permisos vigentes.
  * campoDe(error) puede devolver { campo: mensaje } para errores de negocio de un campo.
+ * alConflicto(error) se llama ante un 409 (HU-08-003: otra persona cambió el mismo dato).
  */
-async function guardar(boton, accion, mensajeOk = "Guardado correctamente", { form, campoDe } = {}) {
+async function guardar(boton, accion, mensajeOk = "Guardado correctamente", { form, campoDe, alConflicto } = {}) {
   const etiqueta = boton.innerHTML;
   boton.style.minWidth = `${boton.offsetWidth}px`;
   boton.disabled = true;
@@ -71,6 +72,7 @@ async function guardar(boton, accion, mensajeOk = "Guardado correctamente", { fo
     else if (form && campoDe?.(e)) Formularios.marcarErrores(form, campoDe(e));
     toast(e.message, "error");
     if (e.status === 403) recargar();
+    if (e.status === 409) alConflicto?.(e);
     return null;
   } finally {
     if (boton.isConnected) {

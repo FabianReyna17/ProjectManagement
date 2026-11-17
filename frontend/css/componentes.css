@@ -303,6 +303,9 @@ th[aria-sort="descending"] .icono-orden .arriba { opacity: 0; }
   font-size: var(--t-sm);
 }
 .nota .icono { color: var(--aviso); margin-top: 2px; vertical-align: 0; }
+/* HU-08-003 */
+.nota-conflicto > div { display: grid; gap: var(--e-1); }
+.nota-conflicto .boton { justify-self: start; margin-top: var(--e-1); }
 
 .esqueleto { display: grid; gap: var(--e-3); }
 .esq-linea, .esq-fila, .esq-campo, .esq-panel {

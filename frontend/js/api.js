@@ -9,10 +9,11 @@ const almacen = {
 
 /** Error de la API con su código HTTP y, si el servidor los indica, los campos inválidos. */
 class ErrorApi extends Error {
-  constructor(mensaje, status = 0, campos = []) {
+  constructor(mensaje, status = 0, campos = [], datos = {}) {
     super(mensaje);
     this.status = status;
     this.campos = campos;
+    this.datos = datos;  // cuerpo completo de la respuesta (p. ej. el valor vigente en un 409)
   }
 }
 
@@ -70,7 +71,7 @@ const API = {
     if (res.status === 401 && !url.endsWith("/auth/login")) this.sesionPerdida(data.detail);
     // El 403 no redirige aquí: el router muestra "Sin acceso" si falla una consulta y
     // guardar() muestra el motivo si falla una acción, sin sacar a la persona de la vista.
-    if (!res.ok) throw new ErrorApi(data.detail || `Error ${res.status}`, res.status, camposConError(data.detail));
+    if (!res.ok) throw new ErrorApi(data.detail || `Error ${res.status}`, res.status, camposConError(data.detail), data);
     return data;
   },
 

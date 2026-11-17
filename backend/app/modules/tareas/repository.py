@@ -70,15 +70,19 @@ def actualizar_responsable(db, tarea_id: int, responsable_id: int) -> None:
 CAMPOS_PLAN = ("responsable_id", "fecha_limite", "prioridad")
 
 
-def actualizar_plan_completo(db, tarea_id: int, valores: dict) -> None:
-    """Actualiza solo los campos del plan recibidos (nombres validados contra CAMPOS_PLAN)."""
-    campos = [c for c in valores if c in CAMPOS_PLAN]
-    db.execute(text(f"UPDATE tareas SET {', '.join(f'{c} = :{c}' for c in campos)} WHERE id = :id"),
-               {**{c: valores[c] for c in campos}, "id": tarea_id})
+def actualizar_si_vigente(db, tarea_id: int, campo: str, leido, nuevo) -> bool:
+    """HU-08-003: cambia el campo solo si aún tiene el valor leído (False si otra persona lo cambió)."""
+    assert campo in CAMPOS_PLAN
+    cur = db.execute(text(f"UPDATE tareas SET {campo} = :nuevo WHERE id = :id AND {campo} IS :leido"),
+                     {"nuevo": nuevo, "leido": leido, "id": tarea_id})
+    return cur.rowcount > 0
 
 
-def actualizar_estado(db, tarea_id: int, estado: str) -> None:
-    db.execute(text("UPDATE tareas SET estado = :e WHERE id = :id"), {"e": estado, "id": tarea_id})
+def actualizar_estado(db, tarea_id: int, actual: str, estado: str) -> bool:
+    """Cambia el estado solo si sigue siendo `actual` (HU-08-003)."""
+    cur = db.execute(text("UPDATE tareas SET estado = :e WHERE id = :id AND estado = :actual"),
+                     {"e": estado, "actual": actual, "id": tarea_id})
+    return cur.rowcount > 0
 
 
 def actualizar_plan(db, tarea_id: int, fecha_limite: Optional[str], prioridad: str) -> None:

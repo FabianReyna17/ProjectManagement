@@ -1,10 +1,11 @@
-"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001, HU-02-002, HU-02-003, HU-08-002).
+"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001, HU-02-002, HU-02-003, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para datos de cuentas usa el servicio de acceso, nunca su repositorio.
 """
 from datetime import date
 from typing import Optional
 
+from ...core import concurrencia
 from ...core.errors import Conflicto, DatosInvalidos, NoEncontrado, Prohibido
 from ...db.database import transaccion
 from ...db.idempotencia import crear_una_vez
@@ -49,24 +50,40 @@ def obtener_autorizado(db, proyecto_id: int, usuario_id: int) -> dict:
     return proyecto
 
 
+NOMBRE_CAMPO = {"nombre": "el nombre", "objetivo": "el objetivo", "responsable_id": "el responsable",
+                "fecha_inicio": "la fecha de inicio", "fecha_fin": "la fecha de fin"}
+
+
+def _conflicto(actual: dict, campos: list) -> Conflicto:
+    """HU-08-003: 409 con los campos en conflicto y los datos vigentes."""
+    vigente = {k: actual[k] for k in (*repo.CAMPOS_EDITABLES, "responsable_nombre")}
+    return Conflicto(concurrencia.mensaje(campos, NOMBRE_CAMPO), {"campos": campos, "vigente": vigente})
+
+
 def actualizar(db, proyecto: dict, actor_id: int, nombre: str, objetivo: str, responsable_id: int,
-               fecha_inicio: date, fecha_fin: date) -> dict:
+               fecha_inicio: date, fecha_fin: date, leidos: Optional[dict] = None) -> dict:
     """HU-02-003: solo el responsable del proyecto. Cada dato que cambia queda en el historial
     con valor anterior, actor y fecha; si algo no es válido no se guarda nada. El nuevo
-    responsable obtiene acceso si no lo tenía; el anterior sigue como participante."""
+    responsable obtiene acceso si no lo tenía; el anterior sigue como participante.
+    HU-08-003: con `leidos`, un dato que otra persona cambió mientras tanto da conflicto;
+    los cambios ajenos en otros datos se conservan."""
     exigir_responsable(proyecto, actor_id)
-    if fecha_fin < fecha_inicio:
-        raise DatosInvalidos(MSG_FECHAS)
-    if responsable_id != proyecto["responsable_id"] and not acceso.puede_ser_responsable(db, responsable_id):
-        raise DatosInvalidos(MSG_RESPONSABLE)
     nuevos = {"nombre": nombre, "objetivo": objetivo, "responsable_id": responsable_id,
               "fecha_inicio": fecha_inicio.isoformat(), "fecha_fin": fecha_fin.isoformat()}
-    cambios = [(campo, proyecto[campo], valor) for campo, valor in nuevos.items() if proyecto[campo] != valor]
+    cambios, en_conflicto = concurrencia.cambios_a_aplicar(proyecto, nuevos, leidos)
+    if en_conflicto:
+        raise _conflicto(proyecto, en_conflicto)
+    final = {**proyecto, **{campo: valor for campo, _, valor in cambios}}
+    if final["fecha_fin"] < final["fecha_inicio"]:
+        raise DatosInvalidos(MSG_FECHAS)
+    if final["responsable_id"] != proyecto["responsable_id"] and not acceso.puede_ser_responsable(db, responsable_id):
+        raise DatosInvalidos(MSG_RESPONSABLE)
     if cambios:
         with transaccion(db):
-            repo.actualizar(db, proyecto["id"], {campo: valor for campo, _, valor in cambios})
-            for campo, anterior, nuevo in cambios:
-                repo.registrar_cambio(db, proyecto["id"], campo, anterior, nuevo, actor_id)
+            for campo, leido, nuevo in cambios:
+                if not repo.actualizar_si_vigente(db, proyecto["id"], campo, leido, nuevo):
+                    raise _conflicto(repo.obtener_con_responsable(db, proyecto["id"]), [campo])
+                repo.registrar_cambio(db, proyecto["id"], campo, leido, nuevo, actor_id)
             if not repo.es_participante(db, proyecto["id"], responsable_id):
                 repo.activar_participante(db, proyecto["id"], responsable_id)
     return ficha(repo.obtener_con_responsable(db, proyecto["id"]), actor_id)

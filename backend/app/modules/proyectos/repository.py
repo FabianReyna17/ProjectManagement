@@ -38,11 +38,12 @@ def obtener_con_responsable(db, proyecto_id: int) -> Optional[dict]:
 CAMPOS_EDITABLES = ("nombre", "objetivo", "responsable_id", "fecha_inicio", "fecha_fin")
 
 
-def actualizar(db, proyecto_id: int, valores: dict) -> None:
-    """Actualiza solo los campos recibidos (nombres validados contra CAMPOS_EDITABLES)."""
-    campos = [c for c in valores if c in CAMPOS_EDITABLES]
-    db.execute(text(f"UPDATE proyectos SET {', '.join(f'{c} = :{c}' for c in campos)} WHERE id = :id"),
-               {**{c: valores[c] for c in campos}, "id": proyecto_id})
+def actualizar_si_vigente(db, proyecto_id: int, campo: str, leido, nuevo) -> bool:
+    """HU-08-003: cambia el campo solo si aún tiene el valor leído (False si otra persona lo cambió)."""
+    assert campo in CAMPOS_EDITABLES
+    cur = db.execute(text(f"UPDATE proyectos SET {campo} = :nuevo WHERE id = :id AND {campo} IS :leido"),
+                     {"nuevo": nuevo, "leido": leido, "id": proyecto_id})
+    return cur.rowcount > 0
 
 
 def registrar_cambio(db, proyecto_id: int, campo: str, anterior, nuevo, actor_id: int) -> None:

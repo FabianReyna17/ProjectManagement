@@ -8,9 +8,10 @@ MSG_PROHIBIDO = "No tienes permiso para realizar esta acción"
 
 
 class ErrorNegocio(Exception):
-    def __init__(self, mensaje: str):
+    def __init__(self, mensaje: str, datos: dict | None = None):
         super().__init__(mensaje)
         self.mensaje = mensaje
+        self.datos = datos or {}  # se agregan a la respuesta junto a "detail" (p. ej. el valor vigente)
 
 
 class DatosInvalidos(ErrorNegocio):

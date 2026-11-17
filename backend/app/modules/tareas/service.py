@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-07-001, HU-07-002, HU-08-002).
+"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-07-001, HU-07-002, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -7,7 +7,7 @@ Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
 from datetime import date
 from typing import Optional
 
-from ...core import tiempo
+from ...core import concurrencia, tiempo
 from ...core.errors import Conflicto, DatosInvalidos, NoEncontrado, Prohibido
 from ...db.database import transaccion
 from ...db.idempotencia import crear_una_vez
@@ -161,39 +161,60 @@ def planificar(db, tarea: dict, actor_id: int, fecha_limite: Optional[date], pri
 
 # Tipo con el que cada campo del plan queda en el historial
 TIPO_HISTORIAL = {"responsable_id": "responsable", "fecha_limite": "fecha_limite", "prioridad": "prioridad"}
+NOMBRE_CAMPO = {"responsable_id": "el responsable", "fecha_limite": "la fecha límite", "prioridad": "la prioridad"}
+
+
+def _conflicto_plan(actual: dict, campos: list) -> Conflicto:
+    """HU-08-003: 409 con los campos en conflicto y el plan vigente."""
+    vigente = {k: actual[k] for k in ("responsable_id", "responsable_nombre", "fecha_limite", "prioridad")}
+    return Conflicto(concurrencia.mensaje(campos, NOMBRE_CAMPO), {"campos": campos, "vigente": vigente})
 
 
 def replanificar(db, tarea: dict, actor_id: int, responsable_id: Optional[int],
-                 fecha_limite: Optional[date], prioridad: str) -> dict:
+                 fecha_limite: Optional[date], prioridad: str, leidos: Optional[dict] = None) -> dict:
     """HU-03-006: cambia responsable, fecha y prioridad en una sola confirmación. Cada valor
     que cambia queda en el historial (anterior, nuevo, actor); si algo no es válido no se
-    guarda nada. Reasignar no toca el estado, los bloqueos ni el historial previo."""
+    guarda nada. Reasignar no toca el estado, los bloqueos ni el historial previo.
+    HU-08-003: con `leidos`, un campo que otra persona cambió mientras tanto da conflicto."""
     _exigir_planificador(tarea, actor_id)
-    if responsable_id is not None and responsable_id != tarea["responsable_id"]:
-        _validar_responsable(db, tarea["proyecto_id"], responsable_id)
     nuevos = {"responsable_id": responsable_id, "fecha_limite": _iso(fecha_limite), "prioridad": prioridad}
-    cambios = [(campo, tarea[campo], valor) for campo, valor in nuevos.items() if tarea[campo] != valor]
+    cambios, en_conflicto = concurrencia.cambios_a_aplicar(tarea, nuevos, leidos)
+    if en_conflicto:
+        raise _conflicto_plan(tarea, en_conflicto)
+    if responsable_id is not None and any(campo == "responsable_id" for campo, _, _ in cambios):
+        _validar_responsable(db, tarea["proyecto_id"], responsable_id)
     if cambios:
         with transaccion(db):
-            repo.actualizar_plan_completo(db, tarea["id"], {campo: valor for campo, _, valor in cambios})
-            for campo, anterior, nuevo in cambios:
-                repo.registrar_cambio(db, tarea["id"], TIPO_HISTORIAL[campo], anterior, nuevo, actor_id)
+            for campo, leido, nuevo in cambios:
+                if not repo.actualizar_si_vigente(db, tarea["id"], campo, leido, nuevo):
+                    raise _conflicto_plan(repo.obtener(db, tarea["id"]), [campo])
+                repo.registrar_cambio(db, tarea["id"], TIPO_HISTORIAL[campo], leido, nuevo, actor_id)
     return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
 
 
-def cambiar_estado(db, tarea: dict, actor_id: int, estado: str) -> dict:
+def _conflicto_estado(actual: str) -> Conflicto:
+    return Conflicto(f"Otra persona cambió el estado a «{NOMBRE_ESTADO[actual]}» mientras lo revisabas. "
+                     "Tu cambio no se guardó: revisa el estado vigente y vuelve a intentarlo",
+                     {"campos": ["estado"], "vigente": {"estado": actual}})
+
+
+def cambiar_estado(db, tarea: dict, actor_id: int, estado: str, leido: Optional[str] = None) -> dict:
     """HU-04-001: solo transiciones permitidas, por la persona asignada o el responsable del proyecto.
-    Repetir el mismo estado no hace nada (un reintento no duplica el historial)."""
+    Repetir el mismo estado no hace nada (un reintento no duplica el historial).
+    HU-08-003: si el estado ya no es el que se veía (`leido`), conflicto en lugar de pisarlo."""
     if not _puede_cambiar_estado(tarea, actor_id):
         raise Prohibido(MSG_ESTADO_PERMISO)
     actual = tarea["estado"]
     if estado != actual:
+        if leido is not None and leido != actual:
+            raise _conflicto_estado(actual)
         if estado not in TRANSICIONES[actual]:
             raise DatosInvalidos(f"No se puede pasar de «{NOMBRE_ESTADO[actual]}» a «{NOMBRE_ESTADO[estado]}»")
         if estado == "terminada" and tarea["bloqueada"]:
             raise DatosInvalidos("La tarea tiene un bloqueo abierto: resuélvelo antes de terminarla")
         with transaccion(db):
-            repo.actualizar_estado(db, tarea["id"], estado)
+            if not repo.actualizar_estado(db, tarea["id"], actual, estado):
+                raise _conflicto_estado(repo.obtener(db, tarea["id"])["estado"])
             repo.registrar_cambio(db, tarea["id"], "estado", actual, estado, actor_id)
     return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
 

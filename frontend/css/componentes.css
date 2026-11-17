@@ -83,6 +83,13 @@
 }
 .chip-bloqueo .icono { width: 14px; height: 14px; vertical-align: 0; }
 
+/* HU-04-005 */
+.chip-vencida { border-color: var(--peligro-borde); background: var(--peligro-suave); color: var(--peligro); }
+.chip-por_vencer { border-color: var(--aviso-borde); background: var(--aviso-suave); color: var(--aviso); }
+.chip-vencida .icono, .chip-por_vencer .icono { width: 14px; height: 14px; vertical-align: 0; }
+.fecha-con-marca { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--e-1) var(--e-2); }
+.tabla .fecha-con-marca { justify-content: flex-start; }
+
 .prioridad { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-sm); white-space: nowrap; }
 .senal { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
 .senal i { width: 3px; border-radius: 1px; background: var(--borde-fuerte); }

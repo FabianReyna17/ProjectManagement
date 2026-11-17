@@ -20,6 +20,7 @@ Abrir <http://localhost:8000>. Cuenta inicial: **admin / Admin123!**
 
 - La BD se crea en `backend/data/gestion.db` y las migraciones pendientes se aplican al arrancar. Para reiniciar, borrar esa carpeta.
 - El esquema se cambia siempre con una migración nueva (`alembic revision -m "descripcion"`), nunca editando tablas a mano.
+- Las tareas vencidas se calculan con el día de Guatemala (`ZONA_HORARIA`) y se avisa desde 3 días antes (`DIAS_POR_VENCER`).
 - La sesión expira tras 8 horas sin actividad (`SESION_INACTIVIDAD_MIN`). Tras 5 intentos fallidos de inicio de sesión con el mismo usuario, cada intento espera 2 s, 4 s, 8 s… hasta 5 min.
 
 ## Pruebas
@@ -76,6 +77,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 2 | HU-04-004 | Resolver bloqueo (solo el responsable) con explicación — `POST /api/tareas/{id}/bloqueos/{bid}/resolver` |
 | 2 | HU-08-002 | `Idempotency-Key` en las creaciones: un reintento no duplica el registro |
 | 3 | HU-07-001 | Tablero con una columna por estado (mismas tareas y orden que la lista), cambio de estado desde la tarjeta; selector Lista/Tablero que se recuerda — `GET /api/proyectos/{id}/tablero` |
+| 3 | HU-04-005 | Marca "Vencida" o "Vence hoy / mañana / en N días" (hasta 3 días antes) en lista, tablero, "Mis tareas" y detalle; se calcula con el día de Guatemala y no aplica a tareas terminadas |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 
@@ -106,4 +108,4 @@ Al llegar la historia que lo necesite:
 
 ## Siguientes sprints
 
-Vencimientos, filtros, replanificación, control de versión, historial visible de la tarea, avisos, comentarios, edición de proyectos, desactivar cuentas y respaldos.
+Filtros, replanificación, control de versión, historial visible de la tarea, avisos, comentarios, edición de proyectos, desactivar cuentas y respaldos.

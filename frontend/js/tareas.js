@@ -23,7 +23,8 @@ function tablaTareas(tareas, { id = "tabla-tareas", conProyecto = false, conAcci
               ? `<td data-label="Proyecto">${escapar(t.proyecto_nombre)}</td>`
               : `<td data-label="Responsable" data-orden="${escapar(t.responsable_nombre || "")}">${t.responsable_nombre ? persona(t.responsable_nombre) : sinAsignar()}</td>`}
             <td data-label="Prioridad" data-orden="${ORDEN_PRIORIDAD[t.prioridad] || 9}">${etiquetaPrioridad(t.prioridad)}</td>
-            <td data-label="Fecha límite" data-orden="${escapar(t.fecha_limite || "")}" class="num">${fecha(t.fecha_limite, "Sin fecha")}</td>
+            <td data-label="Fecha límite" data-orden="${escapar(t.fecha_limite || "")}" class="num">
+              <span class="fecha-con-marca">${fecha(t.fecha_limite, "Sin fecha")}${etiquetaVencimiento(t)}</span></td>
             <td data-label="Estado" data-orden="${t.bloqueada ? 0 : ORDEN_ESTADO[t.estado] || 9}">${etiquetaEstado(t.estado, t.bloqueada)}</td>
             ${conAcciones ? `<td data-label="Acciones" class="acciones">${botonesEstado(t.id, t.estado, transicionesPosibles(t.estado, t.bloqueada))}</td>` : ""}
           </tr>`).join("")}
@@ -74,7 +75,7 @@ function tarjetaTarea(t) {
   return `
     <li class="tarjeta-tarea${t.bloqueada ? " tarjeta-bloqueada" : ""}" data-href="#/tareas/${Number(t.id)}">
       <a class="tarjeta-nombre" href="#/tareas/${Number(t.id)}">${escapar(t.nombre)}</a>
-      ${t.bloqueada ? `<div>${etiquetaBloqueo()}</div>` : ""}
+      ${t.bloqueada || t.vencimiento ? `<div class="ficha-chips">${t.bloqueada ? etiquetaBloqueo() : ""}${etiquetaVencimiento(t)}</div>` : ""}
       <div class="tarjeta-datos">
         ${etiquetaPrioridad(t.prioridad)}
         <span class="num">${fecha(t.fecha_limite, "Sin fecha")}</span>
@@ -187,7 +188,7 @@ async function vistaTarea(id) {
     html: `
       <header class="ficha-encabezado">
         <h1 tabindex="-1">${escapar(t.nombre)}</h1>
-        <div class="ficha-chips">${etiquetaEstado(t.estado, t.bloqueada)}</div>
+        <div class="ficha-chips">${etiquetaEstado(t.estado, t.bloqueada)}${etiquetaVencimiento(t)}</div>
       </header>
       <div class="ficha">
         <div class="ficha-contenido">

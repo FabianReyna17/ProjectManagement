@@ -29,6 +29,16 @@ function etiquetaBloqueo() {
   return `<span class="chip chip-bloqueo">${icono("bloqueo")}Bloqueada</span>`;
 }
 
+// HU-04-005: vencida / por vencer con icono + texto (el servidor calcula con el día de la organización)
+function etiquetaVencimiento(t) {
+  if (!t.vencimiento) return "";
+  const d = t.dias_restantes;
+  const texto = t.vencimiento === "vencida"
+    ? (d === -1 ? "Venció ayer" : `Vencida hace ${-d} días`)
+    : (d === 0 ? "Vence hoy" : d === 1 ? "Vence mañana" : `Vence en ${d} días`);
+  return `<span class="chip chip-${t.vencimiento}">${icono(t.vencimiento === "vencida" ? "aviso" : "reloj")}${escapar(texto)}</span>`;
+}
+
 function etiquetaProyecto(estado) {
   return chip(estado, ESTADOS_PROYECTO);
 }

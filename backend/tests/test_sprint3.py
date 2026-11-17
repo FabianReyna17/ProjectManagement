@@ -1,4 +1,10 @@
 """Pruebas de API del Sprint 3: tablero, vencimientos, replanificación y concurrencia."""
+from datetime import date, datetime, timezone
+
+import pytest
+
+from app.core import tiempo
+
 from .test_sprint2 import crear_tarea, esc  # noqa: F401  (esc es el escenario del Sprint 2)
 
 ESTADOS = ["pendiente", "en_curso", "terminada"]
@@ -95,3 +101,52 @@ def test_tablero_sin_acceso(esc):
     assert esc.c.get(f"/api/proyectos/{esc.pid}/tablero", headers=esc.adm).status_code == 403
     assert esc.c.get("/api/proyectos/9999/tablero", headers=esc.ana).status_code == 403
     assert esc.c.get(f"/api/proyectos/{esc.pid}/tablero").status_code == 401
+
+
+# HU-04-005 Identificar tareas vencidas
+HOY = date(2026, 11, 17)
+
+
+@pytest.fixture()
+def hoy_fijo(monkeypatch):
+    monkeypatch.setattr(tiempo, "hoy", lambda: HOY)
+
+
+def test_dia_de_la_organizacion_es_el_de_guatemala():
+    # 03:00 UTC del 18 son las 21:00 del 17 en Guatemala (UTC-6)
+    assert tiempo.hoy(datetime(2026, 11, 18, 3, 0, tzinfo=timezone.utc)) == date(2026, 11, 17)
+    assert tiempo.hoy(datetime(2026, 11, 18, 6, 0, tzinfo=timezone.utc)) == date(2026, 11, 18)
+
+
+@pytest.mark.parametrize("fecha, marca, dias", [
+    ("2026-11-16", "vencida", -1),     # ayer
+    ("2026-11-17", "por_vencer", 0),   # hoy todavía no está vencida
+    ("2026-11-18", "por_vencer", 1),   # mañana
+    ("2026-11-20", "por_vencer", 3),   # último día del aviso
+    ("2026-11-21", None, 4),
+    (None, None, None),
+])
+def test_casos_limite_de_fecha(esc, hoy_fijo, fecha, marca, dias):
+    t = crear_tarea(esc, fecha_limite=fecha)
+    detalle = esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()
+    assert (detalle["vencimiento"], detalle["dias_restantes"]) == (marca, dias)
+
+
+def test_terminada_no_se_marca_como_vencida(esc, hoy_fijo):
+    t = crear_tarea(esc, fecha_limite="2026-11-10", responsable_id=esc.beto_id)
+    cambiar_estado(esc, esc.beto, t["id"], "en_curso")
+    assert lista(esc, esc.ana)[0]["vencimiento"] == "vencida"
+    cambiar_estado(esc, esc.beto, t["id"], "terminada")
+    assert lista(esc, esc.ana)[0]["vencimiento"] is None
+    cambiar_estado(esc, esc.beto, t["id"], "en_curso")  # reabrirla la vuelve a marcar
+    assert lista(esc, esc.ana)[0]["vencimiento"] == "vencida"
+
+
+def test_indicador_en_lista_tablero_y_mis_tareas(esc, hoy_fijo):
+    vencida = crear_tarea(esc, "Vencida", fecha_limite="2026-11-15", responsable_id=esc.beto_id)
+    pronto = crear_tarea(esc, "Pronto", fecha_limite="2026-11-19", responsable_id=esc.beto_id)
+    marcas = {vencida["id"]: "vencida", pronto["id"]: "por_vencer"}
+    assert {t["id"]: t["vencimiento"] for t in lista(esc, esc.beto)} == marcas
+    assert {t["id"]: t["vencimiento"] for c in tablero(esc, esc.beto) for t in c["tareas"]} == marcas
+    mias = esc.c.get("/api/mis-tareas", headers=esc.beto).json()
+    assert {t["id"]: t["vencimiento"] for t in mias} == marcas

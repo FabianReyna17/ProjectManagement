@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003, HU-04-004, HU-07-001, HU-08-002).
+"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003, HU-04-004, HU-04-005, HU-07-001, HU-08-002).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -7,6 +7,7 @@ Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
 from datetime import date
 from typing import Optional
 
+from ...core import tiempo
 from ...core.errors import Conflicto, DatosInvalidos, NoEncontrado, Prohibido
 from ...db.database import transaccion
 from ...db.idempotencia import crear_una_vez
@@ -76,10 +77,15 @@ def _transiciones(tarea: dict) -> list:
     return sorted(e for e in TRANSICIONES[tarea["estado"]] if not (e == "terminada" and tarea["bloqueada"]))
 
 
+def _con_vencimiento(tarea: dict, dia) -> dict:
+    """HU-04-005: marca de vencida / por vencer según el día de la organización."""
+    return {**tarea, "bloqueada": bool(tarea["bloqueada"]),
+            **tiempo.vencimiento(tarea["fecha_limite"], tarea["estado"] == "terminada", dia)}
+
+
 def detalle(tarea: dict, usuario_id: int) -> dict:
     puede = _puede_cambiar_estado(tarea, usuario_id)
-    return {**tarea,
-            "bloqueada": bool(tarea["bloqueada"]),
+    return {**_con_vencimiento(tarea, tiempo.hoy()),
             "puedo_bloquear": puede and not tarea["bloqueada"] and tarea["estado"] != "terminada",
             "puedo_planificar": tarea["proyecto_responsable_id"] == usuario_id,
             "soy_asignado": tarea["responsable_id"] == usuario_id,
@@ -87,7 +93,8 @@ def detalle(tarea: dict, usuario_id: int) -> dict:
 
 
 def _lista(tareas: list) -> list:
-    return [{**t, "bloqueada": bool(t["bloqueada"])} for t in tareas]
+    dia = tiempo.hoy()
+    return [_con_vencimiento(t, dia) for t in tareas]
 
 
 def listar_de_proyecto(db, proyecto: dict) -> list:

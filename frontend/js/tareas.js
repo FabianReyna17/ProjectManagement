@@ -238,30 +238,29 @@ async function vistaTarea(id) {
             </form>
           </section>
 
+          ${t.puedo_planificar ? `
+          <section class="propiedad">
+            <h2 class="propiedad-titulo">Plan</h2>
+            <form id="f-plan" class="formulario compacto">
+              <label>Responsable
+                <select name="responsable_id">${opcionesPersonas(participantes, t.responsable_id, "Sin asignar")}</select>
+              </label>
+              <label>Prioridad <select name="prioridad">${opcionesPrioridad(t.prioridad)}</select></label>
+              <label>Fecha límite <input type="date" name="fecha_limite" value="${escapar(t.fecha_limite || "")}"></label>
+              <button class="boton secundario chico">Guardar cambios</button>
+            </form>
+          </section>` : `
           <section class="propiedad">
             <h2 class="propiedad-titulo">Responsable</h2>
-            ${t.puedo_planificar ? `
-              <form id="f-responsable" class="formulario compacto">
-                <label><span class="solo-lector">Responsable</span>
-                  <select name="usuario_id" required>${opcionesPersonas(participantes, t.responsable_id, "Seleccionar persona…")}</select>
-                </label>
-                <button class="boton secundario chico">Asignar</button>
-              </form>` : (t.responsable_nombre ? persona(t.responsable_nombre) : sinAsignar())}
+            ${t.responsable_nombre ? persona(t.responsable_nombre) : sinAsignar()}
           </section>
-
           <section class="propiedad">
             <h2 class="propiedad-titulo">Planificación</h2>
-            ${t.puedo_planificar ? `
-              <form id="f-plan" class="formulario compacto">
-                <label>Prioridad <select name="prioridad">${opcionesPrioridad(t.prioridad)}</select></label>
-                <label>Fecha límite <input type="date" name="fecha_limite" value="${escapar(t.fecha_limite || "")}"></label>
-                <button class="boton secundario chico">Guardar planificación</button>
-              </form>` : `
-              <dl class="propiedades">
-                <dt>Prioridad</dt><dd>${etiquetaPrioridad(t.prioridad)}</dd>
-                <dt>Fecha límite</dt><dd class="num">${fecha(t.fecha_limite, "Sin fecha")}</dd>
-              </dl>`}
-          </section>
+            <dl class="propiedades">
+              <dt>Prioridad</dt><dd>${etiquetaPrioridad(t.prioridad)}</dd>
+              <dt>Fecha límite</dt><dd class="num">${fecha(t.fecha_limite, "Sin fecha")}</dd>
+            </dl>
+          </section>`}
 
           <section class="propiedad">
             <h2 class="propiedad-titulo">Registro</h2>
@@ -291,24 +290,18 @@ async function vistaTarea(id) {
         if (ok) recargar();
       });
 
-      // HU-03-002 Asignar responsable
-      const fResp = document.getElementById("f-responsable");
-      fResp?.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const usuario_id = Number(datosForm(fResp).usuario_id);
-        const ok = await guardar(fResp.querySelector("button"),
-          () => API.put(`/api/tareas/${id}/responsable`, { usuario_id }), "Responsable asignado", { form: fResp });
-        if (ok) recargar();
-      });
-
-      // HU-03-003 Fecha límite y prioridad
+      // HU-03-006 Replanificar: responsable, prioridad y fecha en una sola confirmación
       const fPlan = document.getElementById("f-plan");
       fPlan?.addEventListener("submit", async (e) => {
         e.preventDefault();
         const d = datosForm(fPlan);
-        const cuerpo = { fecha_limite: d.fecha_limite || null, prioridad: d.prioridad };
+        const cuerpo = {
+          responsable_id: d.responsable_id ? Number(d.responsable_id) : null,
+          fecha_limite: d.fecha_limite || null,
+          prioridad: d.prioridad,
+        };
         const ok = await guardar(fPlan.querySelector("button"),
-          () => API.put(`/api/tareas/${id}/planificacion`, cuerpo), "Planificación guardada", { form: fPlan });
+          () => API.put(`/api/tareas/${id}/plan`, cuerpo), "Plan actualizado", { form: fPlan });
         if (ok) recargar();
       });
     },

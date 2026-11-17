@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-005, HU-04-001, HU-04-003, HU-04-004, HU-04-005, HU-07-001, HU-08-002).
+"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001, HU-04-003, HU-04-004, HU-04-005, HU-07-001, HU-08-002).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -142,6 +142,28 @@ def planificar(db, tarea: dict, actor_id: int, fecha_limite: Optional[date], pri
             repo.actualizar_plan(db, tarea["id"], nueva_fecha, prioridad)
             for campo, anterior, nuevo in cambios:
                 repo.registrar_cambio(db, tarea["id"], campo, anterior, nuevo, actor_id)
+    return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
+
+
+# Tipo con el que cada campo del plan queda en el historial
+TIPO_HISTORIAL = {"responsable_id": "responsable", "fecha_limite": "fecha_limite", "prioridad": "prioridad"}
+
+
+def replanificar(db, tarea: dict, actor_id: int, responsable_id: Optional[int],
+                 fecha_limite: Optional[date], prioridad: str) -> dict:
+    """HU-03-006: cambia responsable, fecha y prioridad en una sola confirmación. Cada valor
+    que cambia queda en el historial (anterior, nuevo, actor); si algo no es válido no se
+    guarda nada. Reasignar no toca el estado, los bloqueos ni el historial previo."""
+    _exigir_planificador(tarea, actor_id)
+    if responsable_id is not None and responsable_id != tarea["responsable_id"]:
+        _validar_responsable(db, tarea["proyecto_id"], responsable_id)
+    nuevos = {"responsable_id": responsable_id, "fecha_limite": _iso(fecha_limite), "prioridad": prioridad}
+    cambios = [(campo, tarea[campo], valor) for campo, valor in nuevos.items() if tarea[campo] != valor]
+    if cambios:
+        with transaccion(db):
+            repo.actualizar_plan_completo(db, tarea["id"], {campo: valor for campo, _, valor in cambios})
+            for campo, anterior, nuevo in cambios:
+                repo.registrar_cambio(db, tarea["id"], TIPO_HISTORIAL[campo], anterior, nuevo, actor_id)
     return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
 
 

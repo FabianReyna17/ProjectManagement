@@ -150,3 +150,72 @@ def test_indicador_en_lista_tablero_y_mis_tareas(esc, hoy_fijo):
     assert {t["id"]: t["vencimiento"] for c in tablero(esc, esc.beto) for t in c["tareas"]} == marcas
     mias = esc.c.get("/api/mis-tareas", headers=esc.beto).json()
     assert {t["id"]: t["vencimiento"] for t in mias} == marcas
+
+
+# HU-03-006 Replanificar tarea
+def replanificar(e, h, tid, **plan):
+    return e.c.put(f"/api/tareas/{tid}/plan", headers=h, json=plan)
+
+
+def historial(e, h, tid):
+    r = e.c.get(f"/api/tareas/{tid}/historial", headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_replanificar_cambia_todo_y_registra_cada_campo(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id, fecha_limite="2026-11-20", prioridad="media")
+    r = replanificar(esc, esc.ana, t["id"], responsable_id=esc.ana_id, fecha_limite="2026-11-27", prioridad="alta")
+    assert r.status_code == 200, r.text
+    assert (r.json()["responsable_nombre"], r.json()["fecha_limite"], r.json()["prioridad"]) == ("Ana", "2026-11-27", "alta")
+    cambios = [(h["tipo"], h["valor_anterior"], h["valor_nuevo"], h["actor_nombre"])
+               for h in historial(esc, esc.ana, t["id"])][1:]  # la primera es la asignación al crear
+    assert cambios == [("responsable", str(esc.beto_id), str(esc.ana_id), "Ana"),
+                       ("fecha_limite", "2026-11-20", "2026-11-27", "Ana"),
+                       ("prioridad", "media", "alta", "Ana")]
+
+
+def test_cambios_visibles_en_todas_las_vistas(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    assert [x["id"] for x in esc.c.get("/api/mis-tareas", headers=esc.beto).json()] == [t["id"]]
+    replanificar(esc, esc.ana, t["id"], responsable_id=esc.ana_id, fecha_limite="2026-12-01", prioridad="baja")
+    assert esc.c.get("/api/mis-tareas", headers=esc.beto).json() == []
+    assert [x["id"] for x in esc.c.get("/api/mis-tareas", headers=esc.ana).json()] == [t["id"]]
+    fila = lista(esc, esc.beto)[0]
+    assert (fila["responsable_nombre"], fila["fecha_limite"], fila["prioridad"]) == ("Ana", "2026-12-01", "baja")
+    detalle = esc.c.get(f"/api/tareas/{t['id']}", headers=esc.beto).json()
+    assert (detalle["responsable_nombre"], detalle["fecha_limite"], detalle["prioridad"]) == ("Ana", "2026-12-01", "baja")
+
+
+def test_replanificar_sin_cambios_no_registra_nada(esc):
+    t = crear_tarea(esc, fecha_limite="2026-11-20")
+    assert replanificar(esc, esc.ana, t["id"], responsable_id=None, fecha_limite="2026-11-20",
+                        prioridad="media").status_code == 200
+    assert historial(esc, esc.ana, t["id"]) == []
+
+
+def test_desasignar_y_quitar_fecha(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id, fecha_limite="2026-11-20")
+    r = replanificar(esc, esc.ana, t["id"], responsable_id=None, fecha_limite=None, prioridad="media")
+    assert (r.json()["responsable_id"], r.json()["fecha_limite"]) == (None, None)
+
+
+def test_replanificar_invalido_no_cambia_nada(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id, fecha_limite="2026-11-20")
+    antes = esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()
+    # responsable sin acceso al proyecto: tampoco se guarda la fecha ni la prioridad
+    r = replanificar(esc, esc.ana, t["id"], responsable_id=esc.carla_id, fecha_limite="2026-12-01", prioridad="alta")
+    assert r.status_code == 400
+    assert replanificar(esc, esc.ana, t["id"], responsable_id=esc.beto_id, fecha_limite="mañana",
+                        prioridad="alta").status_code == 400
+    assert replanificar(esc, esc.ana, t["id"], responsable_id=esc.beto_id, fecha_limite=None,
+                        prioridad="urgente").status_code == 400
+    assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json() == antes
+
+
+def test_solo_el_responsable_del_proyecto_replanifica(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    plan = {"responsable_id": esc.beto_id, "fecha_limite": None, "prioridad": "alta"}
+    assert replanificar(esc, esc.beto, t["id"], **plan).status_code == 403   # asignado, pero no planifica
+    assert replanificar(esc, esc.carla, t["id"], **plan).status_code == 403  # sin acceso
+    assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.ana).json()["prioridad"] == "media"

@@ -77,6 +77,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 2 | HU-04-004 | Resolver bloqueo (solo el responsable) con explicación — `POST /api/tareas/{id}/bloqueos/{bid}/resolver` |
 | 2 | HU-08-002 | `Idempotency-Key` en las creaciones: un reintento no duplica el registro |
 | 3 | HU-07-001 | Tablero con una columna por estado (mismas tareas y orden que la lista), cambio de estado desde la tarjeta; selector Lista/Tablero que se recuerda — `GET /api/proyectos/{id}/tablero` |
+| 3 | HU-03-006 | Replanificar responsable, prioridad y fecha en una sola confirmación; cada valor que cambia queda en el historial y si algo es inválido no se guarda nada — `PUT /api/tareas/{id}/plan` |
 | 3 | HU-04-005 | Marca "Vencida" o "Vence hoy / mañana / en N días" (hasta 3 días antes) en lista, tablero, "Mis tareas" y detalle; se calcula con el día de Guatemala y no aplica a tareas terminadas |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
@@ -108,4 +109,4 @@ Al llegar la historia que lo necesite:
 
 ## Siguientes sprints
 
-Filtros, replanificación, control de versión, historial visible de la tarea, avisos, comentarios, edición de proyectos, desactivar cuentas y respaldos.
+Filtros, control de versión, historial visible de la tarea, avisos, comentarios, edición de proyectos, desactivar cuentas y respaldos.

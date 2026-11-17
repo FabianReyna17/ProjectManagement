@@ -67,6 +67,16 @@ def actualizar_responsable(db, tarea_id: int, responsable_id: int) -> None:
     db.execute(text("UPDATE tareas SET responsable_id = :r WHERE id = :id"), {"r": responsable_id, "id": tarea_id})
 
 
+CAMPOS_PLAN = ("responsable_id", "fecha_limite", "prioridad")
+
+
+def actualizar_plan_completo(db, tarea_id: int, valores: dict) -> None:
+    """Actualiza solo los campos del plan recibidos (nombres validados contra CAMPOS_PLAN)."""
+    campos = [c for c in valores if c in CAMPOS_PLAN]
+    db.execute(text(f"UPDATE tareas SET {', '.join(f'{c} = :{c}' for c in campos)} WHERE id = :id"),
+               {**{c: valores[c] for c in campos}, "id": tarea_id})
+
+
 def actualizar_estado(db, tarea_id: int, estado: str) -> None:
     db.execute(text("UPDATE tareas SET estado = :e WHERE id = :id"), {"e": estado, "id": tarea_id})
 

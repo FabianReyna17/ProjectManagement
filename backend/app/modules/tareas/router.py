@@ -7,7 +7,7 @@ from ..acceso.deps import usuario_actual
 from ..proyectos.deps import proyecto_autorizado
 from . import service
 from .deps import tarea_autorizada
-from .schemas import BloqueoIn, EstadoIn, PlanificacionIn, ResolucionIn, ResponsableIn, TareaIn
+from .schemas import BloqueoIn, EstadoIn, PlanificacionIn, ReplanificarIn, ResolucionIn, ResponsableIn, TareaIn
 
 router = APIRouter(prefix="/api", tags=["tareas"])
 
@@ -50,6 +50,12 @@ def asignar_responsable(data: ResponsableIn, tarea: dict = Depends(tarea_autoriz
 def planificar_tarea(data: PlanificacionIn, tarea: dict = Depends(tarea_autorizada),
                      u: dict = Depends(usuario_actual), db=Depends(get_db)):
     return service.planificar(db, tarea, u["id"], data.fecha_limite, data.prioridad)
+
+
+@router.put("/tareas/{tarea_id}/plan")
+def replanificar_tarea(data: ReplanificarIn, tarea: dict = Depends(tarea_autorizada),
+                       u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.replanificar(db, tarea, u["id"], data.responsable_id, data.fecha_limite, data.prioridad)
 
 
 @router.put("/tareas/{tarea_id}/estado")

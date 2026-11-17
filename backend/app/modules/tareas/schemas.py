@@ -29,6 +29,14 @@ class PlanificacionIn(Base):
     prioridad: Prioridad
 
 
+class ReplanificarIn(Base):
+    """HU-03-006: se envía el plan completo; solo se guardan los valores que cambian.
+    responsable_id null deja la tarea sin asignar; fecha_limite null, sin fecha."""
+    responsable_id: Optional[int]
+    fecha_limite: Optional[date]
+    prioridad: Prioridad
+
+
 class EstadoIn(Base):
     estado: Estado
 

@@ -41,6 +41,10 @@ class EstadoIn(Base):
     estado: Estado
 
 
+class AvanceIn(Base):
+    texto: str = Field(min_length=1, max_length=1000)
+
+
 class BloqueoIn(Base):
     motivo: str = Field(min_length=1, max_length=1000)
 

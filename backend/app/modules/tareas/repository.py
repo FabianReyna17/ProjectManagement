@@ -86,6 +86,25 @@ def actualizar_plan(db, tarea_id: int, fecha_limite: Optional[str], prioridad: s
                {"f": fecha_limite, "p": prioridad, "id": tarea_id})
 
 
+# --- Avances ---
+
+def insertar_avance(db, tarea_id: int, texto: str, autor_id: int) -> int:
+    return db.execute(text("INSERT INTO avances (tarea_id, texto, autor_id) VALUES (:t, :x, :a)"),
+                      {"t": tarea_id, "x": texto, "a": autor_id}).lastrowid
+
+
+SELECT_AVANCE = """SELECT v.id, v.tarea_id, v.texto, v.autor_id, v.creado_en, a.nombre AS autor_nombre
+                   FROM avances v JOIN usuarios a ON a.id = v.autor_id"""
+
+
+def obtener_avance(db, avance_id: int) -> Optional[dict]:
+    return uno(db, f"{SELECT_AVANCE} WHERE v.id = :id", id=avance_id)
+
+
+def listar_avances(db, tarea_id: int) -> list:
+    return varios(db, f"{SELECT_AVANCE} WHERE v.tarea_id = :t ORDER BY v.id", t=tarea_id)
+
+
 # --- Bloqueos ---
 
 def insertar_bloqueo(db, tarea_id: int, motivo: str, actor_id: int) -> int:

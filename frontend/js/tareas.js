@@ -158,6 +158,14 @@ async function vistaNuevaTarea(pid) {
   };
 }
 
+function itemAvance(a) {
+  return `
+    <li>
+      <p class="texto-largo">${escapar(a.texto)}</p>
+      <p class="meta">${escapar(a.autor_nombre)} · ${momento(a.creado_en)}</p>
+    </li>`;
+}
+
 function bloqueoResuelto(b) {
   return `
     <li class="bloqueo-resuelto">
@@ -171,9 +179,9 @@ function bloqueoResuelto(b) {
 // Detalle de una tarea: contenido a la izquierda, propiedades a la derecha (inspector)
 async function vistaTarea(id) {
   const t = await API.get(`/api/tareas/${id}`);
-  const [participantes, bloqueos] = await Promise.all([
+  const [participantes, bloqueos, avances] = await Promise.all([
     t.puedo_planificar ? API.get(`/api/proyectos/${t.proyecto_id}/participantes`) : [],
-    API.get(`/api/tareas/${id}/bloqueos`),
+    API.get(`/api/tareas/${id}/bloqueos`), API.get(`/api/tareas/${id}/avances`),
   ]);
   const resueltos = bloqueos.filter((b) => b.resuelto_en).reverse();
   const puedeEstado = t.transiciones.length || t.puedo_bloquear;
@@ -211,6 +219,19 @@ async function vistaTarea(id) {
           <section class="bloque">
             <h2 class="titulo-seccion">Resultado esperado</h2>
             ${t.resultado_esperado ? `<p class="texto-largo">${escapar(t.resultado_esperado)}</p>` : `<p class="tenue">Sin definir</p>`}
+          </section>
+
+          <section class="bloque" aria-labelledby="titulo-avances">
+            <h2 class="titulo-seccion" id="titulo-avances">Avances <span class="conteo">${avances.length}</span></h2>
+            ${avances.length
+              ? `<ol class="lista-cambios">${avances.map(itemAvance).join("")}</ol>`
+              : `<p class="tenue">Aún no hay avances registrados.</p>`}
+            ${t.puedo_registrar_avance ? `
+              <form id="f-avance" class="formulario compacto form-avance">
+                <label>Nuevo avance <textarea name="texto" required rows="2" maxlength="1000"
+                  placeholder="Qué se hizo y qué falta"></textarea></label>
+                <div class="acciones-form"><button class="boton secundario chico">Registrar avance</button></div>
+              </form>` : ""}
           </section>
 
           ${resueltos.length ? `
@@ -271,6 +292,16 @@ async function vistaTarea(id) {
       </div>`,
 
     montar() {
+      // HU-04-002 Registrar avance
+      const fAvance = document.getElementById("f-avance");
+      const claveAvance = nuevaClave();  // HU-08-002
+      fAvance?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const ok = await guardar(fAvance.querySelector("button"),
+          () => API.crear(`/api/tareas/${id}/avances`, datosForm(fAvance), claveAvance), "Avance registrado", { form: fAvance });
+        if (ok) recargar();
+      });
+
       // HU-04-003 Registrar bloqueo
       const fBloq = document.getElementById("f-bloqueo");
       const claveBloqueo = nuevaClave();  // HU-08-002

@@ -79,6 +79,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 3 | HU-07-001 | Tablero con una columna por estado (mismas tareas y orden que la lista), cambio de estado desde la tarjeta; selector Lista/Tablero que se recuerda — `GET /api/proyectos/{id}/tablero` |
 | 3 | HU-02-003 | Editar nombre, objetivo, responsable y fechas del proyecto (solo su responsable); cada cambio guarda valor anterior, actor y fecha y se ve en "Cambios del plan"; el nuevo responsable obtiene acceso — `PUT /api/proyectos/{id}`, `GET /api/proyectos/{id}/historial` |
 | 3 | HU-03-006 | Replanificar responsable, prioridad y fecha en una sola confirmación; cada valor que cambia queda en el historial y si algo es inválido no se guarda nada — `PUT /api/tareas/{id}/plan` |
+| 3 | HU-04-002 | Avances de la tarea con texto, autor y fecha (la persona asignada o el responsable), en orden y separados de los cambios de estado; reasignar no los borra — `POST/GET /api/tareas/{id}/avances` |
 | 3 | HU-04-005 | Marca "Vencida" o "Vence hoy / mañana / en N días" (hasta 3 días antes) en lista, tablero, "Mis tareas" y detalle; se calcula con el día de Guatemala y no aplica a tareas terminadas |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).

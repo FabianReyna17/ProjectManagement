@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001, HU-04-003, HU-04-004, HU-04-005, HU-07-001, HU-08-002).
+"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-07-001, HU-08-002).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -17,6 +17,7 @@ from . import repository as repo
 
 MSG_RESPONSABLE = "El responsable debe ser una cuenta activa con acceso al proyecto"
 MSG_ESTADO_PERMISO = "Solo la persona asignada o el responsable del proyecto pueden cambiar el estado"
+MSG_AVANCE_PERMISO = "Solo la persona asignada o el responsable del proyecto pueden registrar avances"
 MSG_BLOQUEO_PERMISO = "Solo la persona asignada o el responsable del proyecto pueden reportar un bloqueo"
 
 NOMBRE_ESTADO = {"pendiente": "Pendiente", "en_curso": "En curso", "terminada": "Terminada"}
@@ -88,6 +89,7 @@ def detalle(tarea: dict, usuario_id: int) -> dict:
     return {**_con_vencimiento(tarea, tiempo.hoy()),
             "puedo_bloquear": puede and not tarea["bloqueada"] and tarea["estado"] != "terminada",
             "puedo_planificar": tarea["proyecto_responsable_id"] == usuario_id,
+            "puedo_registrar_avance": puede,
             "soy_asignado": tarea["responsable_id"] == usuario_id,
             "transiciones": _transiciones(tarea) if puede else []}
 
@@ -187,6 +189,24 @@ def cambiar_estado(db, tarea: dict, actor_id: int, estado: str) -> dict:
 def con_bloqueo(db, tarea: dict, usuario_id: int) -> dict:
     """Detalle de la tarea con su bloqueo abierto (o None)."""
     return {**detalle(tarea, usuario_id), "bloqueo": repo.bloqueo_abierto(db, tarea["id"])}
+
+
+def registrar_avance(db, tarea: dict, actor_id: int, texto: str, clave: Optional[str] = None) -> dict:
+    """HU-04-002: nota breve con autor y fecha; también queda en el historial de la tarea.
+    No cambia el estado ni se borra al reasignar."""
+    if not _puede_cambiar_estado(tarea, actor_id):
+        raise Prohibido(MSG_AVANCE_PERMISO)
+
+    def insertar() -> int:
+        aid = repo.insertar_avance(db, tarea["id"], texto, actor_id)
+        repo.registrar_cambio(db, tarea["id"], "avance", None, texto, actor_id)
+        return aid
+
+    return repo.obtener_avance(db, crear_una_vez(db, actor_id, clave, "avance", insertar))
+
+
+def avances(db, tarea: dict) -> list:
+    return repo.listar_avances(db, tarea["id"])
 
 
 def registrar_bloqueo(db, tarea: dict, actor_id: int, motivo: str, clave: Optional[str] = None) -> dict:

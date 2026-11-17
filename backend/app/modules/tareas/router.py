@@ -7,7 +7,7 @@ from ..acceso.deps import usuario_actual
 from ..proyectos.deps import proyecto_autorizado
 from . import service
 from .deps import tarea_autorizada
-from .schemas import BloqueoIn, EstadoIn, PlanificacionIn, ReplanificarIn, ResolucionIn, ResponsableIn, TareaIn
+from .schemas import AvanceIn, BloqueoIn, EstadoIn, PlanificacionIn, ReplanificarIn, ResolucionIn, ResponsableIn, TareaIn
 
 router = APIRouter(prefix="/api", tags=["tareas"])
 
@@ -62,6 +62,17 @@ def replanificar_tarea(data: ReplanificarIn, tarea: dict = Depends(tarea_autoriz
 def cambiar_estado(data: EstadoIn, tarea: dict = Depends(tarea_autorizada),
                    u: dict = Depends(usuario_actual), db=Depends(get_db)):
     return service.cambiar_estado(db, tarea, u["id"], data.estado)
+
+
+@router.post("/tareas/{tarea_id}/avances", status_code=201)
+def registrar_avance(data: AvanceIn, tarea: dict = Depends(tarea_autorizada),
+                     u: dict = Depends(usuario_actual), clave=Depends(clave_idempotencia), db=Depends(get_db)):
+    return service.registrar_avance(db, tarea, u["id"], data.texto, clave)
+
+
+@router.get("/tareas/{tarea_id}/avances")
+def avances_de_tarea(tarea: dict = Depends(tarea_autorizada), db=Depends(get_db)):
+    return service.avances(db, tarea)
 
 
 @router.post("/tareas/{tarea_id}/bloqueos", status_code=201)

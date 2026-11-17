@@ -94,6 +94,7 @@
 .lista-cambios > li + li { border-top: 1px solid var(--borde); }
 .lista-cambios p { overflow-wrap: anywhere; }
 .valor-anterior { color: var(--texto-2); }
+.form-avance { margin-top: var(--e-3); }
 .pista-campo { color: var(--texto-2); font-size: var(--t-sm); }
 
 /* ---------- Tablero de tareas (HU-07-001) ---------- */

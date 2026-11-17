@@ -271,3 +271,54 @@ def test_actualizar_proyecto_sin_permiso(esc):
     assert editar_proyecto(esc, esc.adm, objetivo="X").status_code == 403    # la función no da acceso
     assert esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.carla).status_code == 403
     assert esc.c.get(f"/api/proyectos/{esc.pid}", headers=esc.ana).json()["objetivo"] == "Sitio"
+
+
+# HU-04-002 Registrar avance
+def avance(e, h, tid, texto, clave=None):
+    extra = {"Idempotency-Key": clave} if clave else {}
+    return e.c.post(f"/api/tareas/{tid}/avances", headers={**h, **extra}, json={"texto": texto})
+
+
+def test_avance_queda_con_texto_autor_y_fecha(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    r = avance(esc, esc.beto, t["id"], "Portada lista en borrador")
+    assert r.status_code == 201, r.text
+    assert (r.json()["texto"], r.json()["autor_nombre"]) == ("Portada lista en borrador", "Beto") and r.json()["creado_en"]
+    avance(esc, esc.ana, t["id"], "Revisada con el cliente")
+    lista_avances = esc.c.get(f"/api/tareas/{t['id']}/avances", headers=esc.ana).json()
+    assert [(a["texto"], a["autor_nombre"]) for a in lista_avances] == [
+        ("Portada lista en borrador", "Beto"), ("Revisada con el cliente", "Ana")]
+
+
+def test_avance_se_distingue_de_los_cambios_de_estado(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    cambiar_estado(esc, esc.beto, t["id"], "en_curso")
+    avance(esc, esc.beto, t["id"], "Mitad hecha")
+    assert [h["tipo"] for h in historial(esc, esc.ana, t["id"])][1:] == ["estado", "avance"]
+    assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.beto).json()["estado"] == "en_curso"  # no cambia el estado
+
+
+def test_avance_sin_permiso_o_invalido(esc):
+    t = crear_tarea(esc)  # sin asignar
+    assert avance(esc, esc.beto, t["id"], "Hola").status_code == 403    # participa pero no está asignado
+    assert avance(esc, esc.carla, t["id"], "Hola").status_code == 403   # sin acceso al proyecto
+    assert esc.c.get(f"/api/tareas/{t['id']}/avances", headers=esc.carla).status_code == 403
+    assert avance(esc, esc.ana, t["id"], "   ").status_code == 400
+    assert esc.c.get(f"/api/tareas/{t['id']}/avances", headers=esc.ana).json() == []
+    assert esc.c.get(f"/api/tareas/{t['id']}", headers=esc.beto).json()["puedo_registrar_avance"] is False
+
+
+def test_reintentar_avance_no_lo_duplica(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    a = avance(esc, esc.beto, t["id"], "Listo", clave="k-1").json()
+    assert avance(esc, esc.beto, t["id"], "Listo", clave="k-1").json()["id"] == a["id"]
+    assert len(esc.c.get(f"/api/tareas/{t['id']}/avances", headers=esc.beto).json()) == 1
+
+
+def test_reasignar_conserva_los_avances_previos(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    avance(esc, esc.beto, t["id"], "Primer avance de Beto")
+    replanificar(esc, esc.ana, t["id"], responsable_id=esc.ana_id, fecha_limite=None, prioridad="media")
+    lista_avances = esc.c.get(f"/api/tareas/{t['id']}/avances", headers=esc.ana).json()
+    assert [(a["texto"], a["autor_nombre"]) for a in lista_avances] == [("Primer avance de Beto", "Beto")]
+    assert avance(esc, esc.beto, t["id"], "Otro").status_code == 403  # ya no está asignado

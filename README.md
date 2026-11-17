@@ -4,7 +4,7 @@ Sistema web para planificar proyectos, asignar tareas y dar seguimiento a su ava
 
 - **Backend:** Python · FastAPI · SQLAlchemy Core · Alembic · SQLite
 - **Frontend:** HTML, CSS y JavaScript sin frameworks ni paso de build, servido por el mismo backend
-- **Arquitectura:** [docs/Arquitectura_Gestion_Proyectos.md](docs/Arquitectura_Gestion_Proyectos.md) (modelo C4)
+- **Arquitectura:** [docs/Arquitectura_Gestion_Proyectos.md](docs/Arquitectura_Gestion_Proyectos.md) (monolito modular)
 
 ## Ejecutar (Windows)
 
@@ -89,10 +89,19 @@ Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el histo
 
 ## Pendientes técnicos
 
-- **Alinear el código con la arquitectura (ADR-03, ADR-04, ADR-10):** PostgreSQL 16, `docker-compose.yml` y frontend en módulos ES. Hay que revisar el SQL propio de SQLite en repositorios y migraciones (`PRAGMA`, `lastrowid`, `INSERT OR IGNORE`, booleanos 0/1), `DATABASE_URL` y el fixture de pruebas, el CI con un servicio `postgres:16` y el orden de carga de los scripts en `index.html`.
-- Sesión en cookie HttpOnly con hash del token en BD (ADR-05); hoy el token vive en `localStorage`.
+Según la propuesta de [arquitectura](docs/Arquitectura_Gestion_Proyectos.md), antes de usar datos reales:
+
+- Aprovisionar el primer administrador de forma segura; hoy se crea `admin / Admin123!` al arrancar.
+- Sesión en cookie HttpOnly/Secure/SameSite con protección CSRF y hash del token en BD; hoy el token vive en `localStorage`.
+- Política de hash de contraseñas que guarde algoritmo y costo, con rehash al iniciar sesión.
+- Respaldo y restauración probados.
 - `str_strip_whitespace` también recorta contraseñas; corregirlo sin romper las ya guardadas.
-- El freno de intentos vive en memoria: con varios procesos de la API, cada uno lleva su cuenta.
+
+Al llegar la historia que lo necesite:
+
+- Frontend dividido en módulos ES (`core/`, `components/`, `features/`); hoy son scripts clásicos que comparten globales.
+- Paginación en los listados.
+- PostgreSQL solo si el piloto confirma escritura concurrente o varios procesos; mientras tanto se sigue con SQLite. En ese caso, el freno de intentos (en memoria) debe pasar a un almacén compartido.
 
 ## Siguientes sprints
 

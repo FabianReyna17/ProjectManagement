@@ -1,0 +1,7 @@
+flowchart TB
+    ruta["API del módulo<br/>entrada, respuesta y códigos HTTP"] --> servicio["Servicio o caso de uso<br/>coordina operación y transacción"]
+    servicio --> reglas["Reglas y políticas<br/>permisos, estados e invariantes"]
+    servicio --> repo["Repositorio del módulo<br/>consultas y persistencia"]
+    repo --> db[("Base de datos compartida")]
+    servicio --> auditoria["Registro de cambios<br/>misma transacción"]
+    auditoria --> db

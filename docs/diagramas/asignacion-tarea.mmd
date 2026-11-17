@@ -1,0 +1,24 @@
+sequenceDiagram
+    actor Persona
+    participant UI as Interfaz
+    participant API as API de tareas
+    participant Servicio as Caso de uso
+    participant BD as Base de datos
+    Persona->>UI: Confirma asignación
+    UI->>API: Responsable, versión y clave de idempotencia
+    API->>Servicio: Identidad autenticada y solicitud validada
+    Servicio->>BD: Inicia transacción y valida acceso vigente
+    Servicio->>BD: Comprueba idempotencia y actualiza si versión coincide
+    alt Solicitud nueva y versión vigente
+        Servicio->>BD: Guarda historial, aviso y resultado idempotente
+        Servicio->>BD: Confirma transacción
+        Servicio-->>API: Asignación confirmada
+        API-->>UI: Éxito con versión nueva
+    else Reintento de la misma solicitud ya confirmada
+        Servicio-->>API: Resultado previo sin repetir efectos
+        API-->>UI: Mismo resultado
+    else Sin permiso o conflicto de versión
+        Servicio->>BD: Revierte cambios
+        Servicio-->>API: Error sin modificar la asignación
+        API-->>UI: 403 o 409 y mensaje comprensible
+    end

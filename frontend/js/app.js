@@ -429,8 +429,10 @@ async function vistaNuevoProyecto() {
 async function vistaProyecto(id) {
   const p = await API.get(`/api/proyectos/${id}`);
   const modo = vistaTareasElegida();
+  const filtros = filtrosTareas(id);
+  const hayFiltros = Object.keys(filtros).length > 0;
   const [participantes, datosTareas, usuarios, cambios] = await Promise.all([
-    API.get(`/api/proyectos/${id}/participantes`), API.get(`/api/proyectos/${id}/${modo}`),
+    API.get(`/api/proyectos/${id}/participantes`), API.get(`/api/proyectos/${id}/${modo}${consultaFiltros(filtros)}`),
     p.soy_responsable ? API.get("/api/usuarios") : [], API.get(`/api/proyectos/${id}/historial`),
   ]);
   const tareas = modo === "tablero" ? datosTareas.columnas.flatMap((c) => c.tareas) : datosTareas;
@@ -473,12 +475,16 @@ async function vistaProyecto(id) {
         <div class="encabezado-seccion">
           <h2 class="titulo-seccion" id="titulo-tareas">Tareas
             <span class="conteo" data-conteo="tabla-tareas" data-total="${resumen}">${resumen}</span></h2>
-          ${tareas.length ? `<div class="encabezado-acciones">
-            ${modo === "lista" ? buscadorTabla("tabla-tareas", "Buscar tarea") : ""}
+          ${tareas.length || hayFiltros ? `<div class="encabezado-acciones">
+            ${modo === "tareas" && tareas.length ? buscadorTabla("tabla-tareas", "Buscar tarea") : ""}
             ${selectorVistaTareas(modo)}
           </div>` : ""}
         </div>
-        ${tareas.length === 0
+        ${tareas.length || hayFiltros ? barraFiltros(p.id, filtros, participantes) : ""}
+        ${tareas.length === 0 && hayFiltros
+          ? vacio("Ninguna tarea cumple los filtros", "Cambia algún filtro o quítalos para ver todas las tareas.",
+              `<button type="button" class="boton secundario" data-accion="quitar-filtros" data-proyecto="${p.id}">Quitar filtros</button>`)
+          : tareas.length === 0
           ? (p.soy_responsable
             ? vacio("Este proyecto no tiene tareas", "Divide el objetivo en tareas y asígnalas al equipo.",
                 `<a class="boton" href="${nuevaTarea}">${icono("mas")}Crear la primera tarea</a>`)
@@ -518,6 +524,14 @@ async function vistaProyecto(id) {
       </section>` : ""}`,
 
     montar() {
+      // HU-07-002: cada cambio de filtro vuelve a consultar al servidor
+      const fFiltros = document.getElementById("f-filtros");
+      fFiltros?.addEventListener("change", () => {
+        guardarFiltros(id, datosForm(fFiltros));
+        recargar();
+      });
+      fFiltros?.addEventListener("submit", (e) => e.preventDefault());
+
       const form = document.getElementById("f-participante");
       form?.addEventListener("submit", async (e) => {
         e.preventDefault();

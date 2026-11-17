@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-07-001, HU-08-002).
+"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-07-001, HU-07-002, HU-08-002).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -99,17 +99,29 @@ def _lista(tareas: list) -> list:
     return [_con_vencimiento(t, dia) for t in tareas]
 
 
-def listar_de_proyecto(db, proyecto: dict) -> list:
-    """HU-03-005: tareas del proyecto (ya autorizado); responsable_id null = sin asignar."""
-    return _lista(repo.listar_de_proyecto(db, proyecto["id"]))
+def _cumple(tarea: dict, filtros: dict) -> bool:
+    """HU-07-002: la tarea cumple todos los filtros indicados (los vacíos no filtran)."""
+    responsable = filtros.get("responsable")
+    return ((not filtros.get("estado") or tarea["estado"] == filtros["estado"])
+            and (not filtros.get("prioridad") or tarea["prioridad"] == filtros["prioridad"])
+            and (not filtros.get("vencimiento") or tarea["vencimiento"] == filtros["vencimiento"])
+            and (not responsable
+                 or (responsable == "sin_asignar" and tarea["responsable_id"] is None)
+                 or (responsable.isdigit() and tarea["responsable_id"] == int(responsable))))
 
 
-def tablero(db, proyecto: dict, usuario_id: int) -> dict:
+def listar_de_proyecto(db, proyecto: dict, filtros: Optional[dict] = None) -> list:
+    """HU-03-005: tareas del proyecto (ya autorizado); responsable_id null = sin asignar.
+    Los filtros solo reducen esta lista: nunca agregan tareas de otros proyectos."""
+    return [t for t in _lista(repo.listar_de_proyecto(db, proyecto["id"])) if _cumple(t, filtros or {})]
+
+
+def tablero(db, proyecto: dict, usuario_id: int, filtros: Optional[dict] = None) -> dict:
     """HU-07-001: las mismas tareas y en el mismo orden que la lista del proyecto, en una
     columna por estado. Cada tarjeta trae las transiciones que este usuario puede hacer."""
     columnas = [{"estado": e, "nombre": n, "tareas": []} for e, n in NOMBRE_ESTADO.items()]
     por_estado = {c["estado"]: c["tareas"] for c in columnas}
-    for t in listar_de_proyecto(db, proyecto):
+    for t in listar_de_proyecto(db, proyecto, filtros):
         puede = usuario_id in (t["responsable_id"], proyecto["responsable_id"])
         por_estado[t["estado"]].append({**t, "transiciones": _transiciones(t) if puede else []})
     return {"columnas": columnas}

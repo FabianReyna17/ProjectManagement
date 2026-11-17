@@ -1,5 +1,7 @@
 """Endpoints de tareas. Solo validan la entrada y llaman al servicio."""
-from fastapi import APIRouter, Depends
+from typing import Literal, Optional
+
+from fastapi import APIRouter, Depends, Query
 
 from ...core.cabeceras import clave_idempotencia
 from ...db.database import get_db
@@ -7,9 +9,17 @@ from ..acceso.deps import usuario_actual
 from ..proyectos.deps import proyecto_autorizado
 from . import service
 from .deps import tarea_autorizada
-from .schemas import AvanceIn, BloqueoIn, EstadoIn, PlanificacionIn, ReplanificarIn, ResolucionIn, ResponsableIn, TareaIn
+from .schemas import (AvanceIn, BloqueoIn, Estado, EstadoIn, PlanificacionIn, Prioridad, ReplanificarIn,
+                      ResolucionIn, ResponsableIn, TareaIn)
 
 router = APIRouter(prefix="/api", tags=["tareas"])
+
+
+def filtros_tareas(estado: Optional[Estado] = None, prioridad: Optional[Prioridad] = None,
+                   responsable: Optional[str] = Query(None, pattern=r"^(sin_asignar|\d+)$"),
+                   vencimiento: Optional[Literal["vencida", "por_vencer"]] = None) -> dict:
+    """HU-07-002: filtros opcionales; un valor desconocido → 400."""
+    return {"estado": estado, "prioridad": prioridad, "responsable": responsable, "vencimiento": vencimiento}
 
 
 @router.post("/proyectos/{proyecto_id}/tareas", status_code=201)
@@ -20,14 +30,15 @@ def crear_tarea(data: TareaIn, proyecto: dict = Depends(proyecto_autorizado),
 
 
 @router.get("/proyectos/{proyecto_id}/tareas")
-def tareas_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), db=Depends(get_db)):
-    return service.listar_de_proyecto(db, proyecto)
+def tareas_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), filtros: dict = Depends(filtros_tareas),
+                        db=Depends(get_db)):
+    return service.listar_de_proyecto(db, proyecto, filtros)
 
 
 @router.get("/proyectos/{proyecto_id}/tablero")
 def tablero_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), u: dict = Depends(usuario_actual),
-                         db=Depends(get_db)):
-    return service.tablero(db, proyecto, u["id"])
+                         filtros: dict = Depends(filtros_tareas), db=Depends(get_db)):
+    return service.tablero(db, proyecto, u["id"], filtros)
 
 
 @router.get("/mis-tareas")

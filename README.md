@@ -81,6 +81,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 3 | HU-03-006 | Replanificar responsable, prioridad y fecha en una sola confirmación; cada valor que cambia queda en el historial y si algo es inválido no se guarda nada — `PUT /api/tareas/{id}/plan` |
 | 3 | HU-04-002 | Avances de la tarea con texto, autor y fecha (la persona asignada o el responsable), en orden y separados de los cambios de estado; reasignar no los borra — `POST/GET /api/tareas/{id}/avances` |
 | 3 | HU-04-006 | Sección "Historial" en el detalle: responsable, fecha, prioridad, estado, avances, bloqueos y resoluciones en orden, con actor y fecha; sin acceso al proyecto no se puede consultar — `GET /api/tareas/{id}/historial` |
+| 3 | HU-07-002 | Filtros por estado, responsable (o sin asignar), prioridad y vencimiento en la lista y el tablero; se combinan, se indican los activos y se quitan con un botón; los aplica el servidor dentro del proyecto autorizado — `?estado=&responsable=&prioridad=&vencimiento=` |
 | 3 | HU-04-005 | Marca "Vencida" o "Vence hoy / mañana / en N días" (hasta 3 días antes) en lista, tablero, "Mis tareas" y detalle; se calcula con el día de Guatemala y no aplica a tareas terminadas |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
@@ -112,4 +113,4 @@ Al llegar la historia que lo necesite:
 
 ## Siguientes sprints
 
-Filtros, control de versión, avisos, comentarios, desactivar cuentas y respaldos.
+Control de versión, avisos, comentarios, desactivar cuentas y respaldos.

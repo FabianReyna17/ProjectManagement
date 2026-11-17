@@ -359,3 +359,67 @@ def test_historial_sin_acceso_por_enlace_directo(esc):
     assert esc.c.get("/api/tareas/9999/historial", headers=esc.ana).status_code == 403
     assert esc.c.delete(f"/api/proyectos/{esc.pid}/participantes/{esc.beto_id}", headers=esc.ana).status_code == 200
     assert esc.c.get(f"/api/tareas/{t['id']}/historial", headers=esc.beto).status_code == 403  # perdió el acceso
+
+
+# HU-07-002 Filtrar tareas
+def filtradas(e, h, recurso="tareas", **filtros):
+    r = e.c.get(f"/api/proyectos/{e.pid}/{recurso}", headers=h, params=filtros)
+    assert r.status_code == 200, r.text
+    datos = r.json()
+    return sorted(t["nombre"] for t in (datos if recurso == "tareas" else
+                                         [t for c in datos["columnas"] for t in c["tareas"]]))
+
+
+@pytest.fixture()
+def varias(esc, hoy_fijo):
+    crear_tarea(esc, "A", responsable_id=esc.beto_id, prioridad="alta", fecha_limite="2026-11-10")
+    b = crear_tarea(esc, "B", responsable_id=esc.beto_id, prioridad="baja", fecha_limite="2026-11-18")
+    crear_tarea(esc, "C", prioridad="alta")
+    crear_tarea(esc, "D", responsable_id=esc.ana_id, prioridad="alta", fecha_limite="2026-11-19")
+    cambiar_estado(esc, esc.beto, b["id"], "en_curso")
+    return esc
+
+
+@pytest.mark.parametrize("filtros, esperadas", [
+    ({}, ["A", "B", "C", "D"]),
+    ({"prioridad": "alta"}, ["A", "C", "D"]),
+    ({"estado": "en_curso"}, ["B"]),
+    ({"responsable": "sin_asignar"}, ["C"]),
+    ({"vencimiento": "vencida"}, ["A"]),
+    ({"vencimiento": "por_vencer"}, ["B", "D"]),
+    ({"prioridad": "alta", "vencimiento": "por_vencer"}, ["D"]),
+    ({"estado": "pendiente", "prioridad": "alta", "responsable": None}, ["A", "C", "D"]),
+    ({"estado": "terminada"}, []),
+])
+def test_combinaciones_de_filtros(varias, filtros, esperadas):
+    filtros = {k: v for k, v in filtros.items() if v is not None}
+    assert filtradas(varias, varias.ana, **filtros) == esperadas
+    assert filtradas(varias, varias.ana, "tablero", **filtros) == esperadas
+
+
+def test_filtrar_por_responsable(varias):
+    assert filtradas(varias, varias.ana, responsable=varias.beto_id) == ["A", "B"]
+    assert filtradas(varias, varias.ana, responsable=varias.beto_id, prioridad="alta") == ["A"]
+    assert filtradas(varias, varias.ana, responsable=varias.carla_id) == []
+
+
+def test_filtros_solo_en_proyectos_autorizados(varias):
+    url = f"/api/proyectos/{varias.pid}/tareas"
+    assert varias.c.get(url, headers=varias.carla, params={"prioridad": "alta"}).status_code == 403
+    assert varias.c.get(f"/api/proyectos/{varias.pid}/tablero", headers=varias.carla,
+                        params={"responsable": "sin_asignar"}).status_code == 403
+    # otro proyecto de carla: sus filtros no devuelven tareas de "Web"
+    carla_resp = crear_usuario(varias.c, varias.adm, "eva", "Responsable")
+    eva = login(varias.c, "eva", "clave123")
+    otro = varias.c.post("/api/proyectos", headers=eva, json={
+        "nombre": "Otro", "objetivo": "X", "responsable_id": carla_resp,
+        "fecha_inicio": "2026-11-01", "fecha_fin": "2026-12-01"}).json()
+    assert varias.c.get(f"/api/proyectos/{otro['id']}/tareas", headers=eva,
+                        params={"responsable": varias.beto_id}).json() == []
+
+
+def test_filtro_con_valor_desconocido(varias):
+    url = f"/api/proyectos/{varias.pid}/tareas"
+    for filtros in ({"estado": "cerrada"}, {"prioridad": "urgente"}, {"responsable": "beto"},
+                    {"vencimiento": "pronto"}):
+        assert varias.c.get(url, headers=varias.ana, params=filtros).status_code == 400

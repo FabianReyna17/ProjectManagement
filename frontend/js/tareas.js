@@ -55,6 +55,60 @@ ACCIONES["vista-tareas"] = (btn) => {
   recargar();
 };
 
+// ---------- HU-07-002 Filtros (por proyecto; se recuerdan solo en esta pestaña) ----------
+
+const CAMPOS_FILTRO = ["estado", "responsable", "prioridad", "vencimiento"];
+
+function filtrosTareas(pid) {
+  let guardados = {};
+  try { guardados = JSON.parse(almacen.leer(`filtros-${pid}`, sessionStorage) || "{}"); } catch { /* valor dañado */ }
+  return Object.fromEntries(CAMPOS_FILTRO.filter((c) => guardados[c]).map((c) => [c, String(guardados[c])]));
+}
+
+function guardarFiltros(pid, valores) {
+  const activos = Object.fromEntries(CAMPOS_FILTRO.filter((c) => valores[c]).map((c) => [c, valores[c]]));
+  almacen.guardar(`filtros-${pid}`, JSON.stringify(activos), sessionStorage);
+}
+
+function consultaFiltros(filtros) {
+  const q = new URLSearchParams(filtros).toString();
+  return q ? `?${q}` : "";
+}
+
+function barraFiltros(pid, filtros, participantes) {
+  const opciones = {
+    estado: ["Estado", "Todos", Object.entries(ESTADOS_TAREA)],
+    responsable: ["Responsable", "Todos", [["sin_asignar", "Sin asignar"], ...participantes.map((x) => [String(x.id), x.nombre])]],
+    prioridad: ["Prioridad", "Todas", Object.entries(PRIORIDADES)],
+    vencimiento: ["Vencimiento", "Cualquiera", [["vencida", "Vencidas"], ["por_vencer", "Por vencer"]]],
+  };
+  const activos = CAMPOS_FILTRO.filter((c) => filtros[c]).map((c) => {
+    const [etiqueta, , lista] = opciones[c];
+    const texto = lista.find(([v]) => v === filtros[c])?.[1] || filtros[c];
+    return `<span class="chip">${escapar(etiqueta)}: ${escapar(texto)}</span>`;
+  });
+  return `
+    <form id="f-filtros" class="filtros-tareas" data-sin-aviso-cambios="1" aria-label="Filtrar tareas">
+      ${CAMPOS_FILTRO.map((c) => {
+        const [etiqueta, todos, lista] = opciones[c];
+        return `<label>${etiqueta}<select name="${c}">
+          <option value="">${todos}</option>
+          ${lista.map(([v, t]) => `<option value="${escapar(v)}" ${filtros[c] === v ? "selected" : ""}>${escapar(t)}</option>`).join("")}
+        </select></label>`;
+      }).join("")}
+    </form>
+    ${activos.length ? `
+      <div class="filtros-activos" role="status">
+        <span class="tenue">Filtros activos:</span>${activos.join("")}
+        <button type="button" class="boton chico secundario" data-accion="quitar-filtros" data-proyecto="${Number(pid)}">${icono("cerrar")}Quitar filtros</button>
+      </div>` : ""}`;
+}
+
+ACCIONES["quitar-filtros"] = (btn) => {
+  almacen.borrar(`filtros-${btn.dataset.proyecto}`, sessionStorage);
+  recargar();
+};
+
 /** Una columna por estado; las tarjetas llegan del servidor en el mismo orden que la lista. */
 function tableroTareas(columnas) {
   return `

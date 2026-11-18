@@ -856,24 +856,7 @@ async function vistaUsuarios() {
           <a class="boton secundario" href="#/respaldos">${icono("respaldo")}Respaldos</a>
         </div>
       </header>
-      <div class="dos-columnas">
-        <section class="bloque" aria-labelledby="titulo-registro">
-          <h2 class="titulo-seccion" id="titulo-registro">Registrar cuenta</h2>
-          <form id="f-usuario" class="formulario">
-            <label>Usuario <span class="opcional">identificador único</span>
-              <input name="usuario" required minlength="3" maxlength="50" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
-            <label>Nombre completo <input name="nombre" required maxlength="100" autocomplete="off"></label>
-            <label>Contraseña inicial <input name="password" type="password" required minlength="6" maxlength="100" autocomplete="new-password"></label>
-            <label>Función
-              <select name="funcion_id" required>
-                <option value="">Seleccionar…</option>
-                ${funciones.map((f) => `<option value="${Number(f.id)}">${escapar(f.nombre)}</option>`).join("")}
-              </select>
-            </label>
-            <div class="acciones-form"><button class="boton">Registrar cuenta</button></div>
-          </form>
-        </section>
-        <section class="bloque" aria-labelledby="titulo-cuentas">
+      <section class="bloque" aria-labelledby="titulo-cuentas">
           <div class="encabezado-seccion">
             <h2 class="titulo-seccion" id="titulo-cuentas">Cuentas</h2>
             ${buscadorTabla("tabla-usuarios", "Buscar cuenta")}
@@ -907,7 +890,22 @@ async function vistaUsuarios() {
             </table>
           </div>
         </section>
-      </div>`,
+        <section class="bloque bloque-registro" aria-labelledby="titulo-registro">
+          <h2 class="titulo-seccion" id="titulo-registro">Registrar cuenta</h2>
+          <form id="f-usuario" class="formulario">
+            <label>Usuario <span class="opcional">identificador único</span>
+              <input name="usuario" required minlength="3" maxlength="50" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+            <label>Nombre completo <input name="nombre" required maxlength="100" autocomplete="off"></label>
+            <label>Contraseña inicial <input name="password" type="password" required minlength="6" maxlength="100" autocomplete="new-password"></label>
+            <label>Función
+              <select name="funcion_id" required>
+                <option value="">Seleccionar…</option>
+                ${funciones.map((f) => `<option value="${Number(f.id)}">${escapar(f.nombre)}</option>`).join("")}
+              </select>
+            </label>
+            <div class="acciones-form"><button class="boton">Registrar cuenta</button></div>
+          </form>
+        </section>`,
     montar() {
       const form = document.getElementById("f-usuario");
       const clave = nuevaClave();  // HU-08-002: un reintento no responde "ya existe"

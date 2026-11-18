@@ -16,7 +16,7 @@ python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload
 ```
 
-Abrir <http://localhost:8000>. Cuenta inicial: **admin / Admin123!**
+Abrir <http://localhost:8000>. Cuenta inicial: **admin / Admin123!** (`ADMIN_PASSWORD_INICIAL`); al entrar por primera vez pide cambiarla.
 
 - La BD se crea en `backend/data/gestion.db` y las migraciones pendientes se aplican al arrancar. Para reiniciar, borrar esa carpeta.
 - El esquema se cambia siempre con una migración nueva (`alembic revision -m "descripcion"`), nunca editando tablas a mano.
@@ -108,6 +108,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 6 | HU-08-004 | Respaldo periódico de la BD y los adjuntos: un `.zip` con copia consistente de SQLite (cuentas, permisos, proyectos, tareas, avances, bloqueos, comentarios, archivos, avisos e historial), los adjuntos y un manifiesto con filas por tabla y huellas. Se escribe como `.parcial`, se verifica y solo entonces queda disponible. El servidor respalda cuando el último válido tiene más de `RESPALDO_CADA_HORAS` (24) y conserva los `RESPALDOS_CONSERVAR` (14) más recientes; también `python -m app.programado respaldo`. Cada ejecución registra fecha, resultado y detalle; la vista "Respaldos" (`g r`, solo Admin) señala si el último falló o está atrasado y permite respaldar ahora. Se guardan en `RESPALDOS_DIR`, aparte de la información en uso, con permisos restringidos y nunca se sirven por HTTP — `GET/POST /api/respaldos`, [procedimiento](docs/Respaldo_y_Restauracion.md) |
 | 6 | HU-08-005 | Restaurar y verificar la recuperación: `python -m app.modules.respaldos.restauracion RESPALDO.zip --bd … --archivos …` verifica el respaldo antes de copiar nada, no pisa una BD existente sin `--forzar`, aplica las migraciones pendientes y mide el tiempo. Con `--comparar-con ORIGEN.db --informe X.md` documenta por tabla qué coincide y qué se registró o cambió después del respaldo (no recuperable desde él). Procedimiento de producción y de prueba, límites propuestos (1 h de recuperación, hasta 24 h de pérdida) y resultado del ensayo en [Respaldo y restauración](docs/Respaldo_y_Restauracion.md). Las pruebas restauran, comparan con el origen y levantan la aplicación sobre la copia: relaciones, autoría, adjuntos y permisos se conservan y nadie gana acceso |
 | 6 | HU-01-010 | Historial de cambios de acceso (solo Admin; ni el responsable del proyecto): altas de cuenta, cambios de función, desactivaciones, restablecimientos y cada alta o retiro de acceso a un proyecto (al crearlo, al agregar o retirar participantes y al cambiar de responsable), con persona, proyecto, actor, fecha y valor anterior y nuevo. Vista "Historial de accesos" desde Usuarios, filtrable por persona o proyecto. Los eventos solo se agregan: cambiar o desactivar una cuenta no altera los anteriores. La migración 0021 carga lo anterior desde cuentas y participantes con actor "No registrado" — `GET /api/cambios-acceso?usuario_id=&proyecto_id=` |
+| 6 | TEC-02 | Correcciones y regresión: el admin inicial debe cambiar su contraseña al primer ingreso (`ADMIN_PASSWORD_INICIAL`); las contraseñas ya no se recortan (las guardadas recortadas siguen sirviendo y no se aceptan solo espacios); en "Usuarios" la tabla de cuentas va a todo el ancho para que sus acciones no queden cortadas. `tests/test_regresion_permisos.py` recorre todas las rutas de la API: sin sesión, con cuenta desactivada o con contraseña temporal pendiente no responden; las de administración solo el Admin; quien no participa recibe 403 en todo lo del proyecto sin que cambie nada |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 
@@ -124,10 +125,8 @@ Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el histo
 
 Según la propuesta de [arquitectura](docs/Arquitectura_Gestion_Proyectos.md), antes de usar datos reales:
 
-- Aprovisionar el primer administrador de forma segura; hoy se crea `admin / Admin123!` al arrancar.
 - Sesión en cookie HttpOnly/Secure/SameSite con protección CSRF y hash del token en BD; hoy el token vive en `localStorage`.
 - Política de hash de contraseñas que guarde algoritmo y costo, con rehash al iniciar sesión.
-- `str_strip_whitespace` también recorta contraseñas; corregirlo sin romper las ya guardadas.
 
 Al llegar la historia que lo necesite:
 

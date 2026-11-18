@@ -164,6 +164,10 @@ def verificar(ruta_zip: Path) -> dict:
     return manifiesto
 
 
+def _cantidad(n: int, nombre: str) -> str:
+    return f"{n} {nombre}{'' if n == 1 else 's'}"
+
+
 def _depurar(db) -> None:
     """Conserva solo los RESPALDOS_CONSERVAR válidos más recientes (los registros se mantienen)."""
     for viejo in repo.validos(db)[conservar():]:
@@ -188,8 +192,9 @@ def crear_respaldo(db, origen: str = "programado", actor_id: Optional[int] = Non
         _proteger(final, 0o600)
         filas = manifiesto["filas"]
         datos.update(resultado="ok", archivo=nombre, tamano=final.stat().st_size,
-                     detalle=f"{filas.get('proyectos', 0)} proyectos, {filas.get('tareas', 0)} tareas, "
-                             f"{len(manifiesto['archivos'])} adjuntos")
+                     detalle=", ".join([_cantidad(filas.get("proyectos", 0), "proyecto"),
+                                        _cantidad(filas.get("tareas", 0), "tarea"),
+                                        _cantidad(len(manifiesto["archivos"]), "adjunto")]))
     except Exception as e:  # noqa: BLE001 — cualquier fallo se registra y se señala al Admin
         log.exception("Falló el respaldo")
         try:

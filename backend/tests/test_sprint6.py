@@ -239,7 +239,7 @@ def datos(esc):
 def test_el_respaldo_incluye_toda_la_informacion_y_es_legible(datos):
     r = respaldar(datos)
     assert (r["resultado"], r["origen"], r["actor_nombre"]) == ("ok", "manual", "Administrador")
-    assert r["detalle"] == "1 proyectos, 1 tareas, 1 adjuntos" and r["tamano"] > 0
+    assert r["detalle"] == "1 proyecto, 1 tarea, 1 adjunto" and r["tamano"] > 0
     ruta = carpeta_respaldos() / r["archivo"]
     assert "/" not in r["archivo"] and ruta.is_file()  # al Admin no se le muestra la ruta del servidor
     with zipfile.ZipFile(ruta) as z:
@@ -487,3 +487,43 @@ def test_la_migracion_carga_los_accesos_anteriores(tmp_path, monkeypatch):
         (2, 1, "acceso_retiro", "con acceso", "sin acceso", None, "2026-10-05 10:00:00"),
         (2, None, "funcion", "Responsable", "Integrante", 1, "2026-11-01 10:00:00"),
     ]
+
+
+# TEC-02 Correcciones antes del release
+def test_las_contrasenas_no_se_recortan(esc):
+    r = esc.c.post("/api/usuarios", headers=esc.adm, json={
+        "usuario": "eva", "nombre": "Eva", "password": "  con espacios ", "funcion_id": 3})
+    assert r.status_code == 201
+    assert entrar(esc, "eva", "  con espacios ").status_code == 200
+    assert entrar(esc, "eva", "con espacios").status_code == 401
+    r = esc.c.post("/api/usuarios", headers=esc.adm, json={
+        "usuario": "solo", "nombre": "Solo", "password": "        ", "funcion_id": 3})
+    assert r.status_code == 400  # solo espacios no es una contraseña
+
+
+def test_las_contrasenas_guardadas_recortadas_siguen_sirviendo(esc):
+    """Antes de la v1 "  clave123 " se guardaba como "clave123": quien la escribe como siempre entra."""
+    assert entrar(esc, "beto", "  clave123 ").status_code == 200
+    assert entrar(esc, "beto", "clave123").status_code == 200
+    h = login(esc.c, "beto", "clave123")
+    r = esc.c.post("/api/auth/password", headers=h, json={"actual": " clave123", "nueva": "nueva123"})
+    assert r.status_code == 200
+    r = esc.c.post("/api/auth/password", headers=h, json={"actual": "nueva123", "nueva": "        "})
+    assert r.status_code == 400
+
+
+def test_el_admin_inicial_debe_cambiar_su_contrasena(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    monkeypatch.setenv("ADMIN_CAMBIO_OBLIGATORIO", "1")
+    monkeypatch.setenv("ADMIN_PASSWORD_INICIAL", "Inicial-2026")
+    with TestClient(app) as c:
+        assert c.post("/api/auth/login", json={"usuario": "admin", "password": "Admin123!"}).status_code == 401
+        r = c.post("/api/auth/login", json={"usuario": "admin", "password": "Inicial-2026"})
+        assert r.json()["usuario"]["debe_cambiar_password"] is True
+        h = {"Authorization": f"Bearer {r.json()['token']}"}
+        assert c.get("/api/usuarios", headers=h).status_code == 403
+        assert c.post("/api/auth/password", headers=h,
+                      json={"actual": "Inicial-2026", "nueva": "Segura-2026"}).status_code == 200
+        assert c.get("/api/usuarios", headers=h).status_code == 200

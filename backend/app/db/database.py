@@ -54,14 +54,17 @@ def migrar(url: str | None = None) -> None:
 
 
 def init_db() -> None:
+    """Administrador inicial, solo si no hay cuentas: admin con ADMIN_PASSWORD_INICIAL
+    (Admin123! por defecto). Debe cambiarla al entrar por primera vez (ADMIN_CAMBIO_OBLIGATORIO=0
+    lo omite, solo para pruebas automáticas)."""
     migrar()
     with get_engine().connect() as conn:
-        # Administrador inicial (solo si no hay cuentas)
         if conn.execute(text("SELECT COUNT(*) FROM usuarios")).scalar() == 0:
             conn.execute(
-                text("""INSERT INTO usuarios (usuario, nombre, password_hash, funcion_id)
-                        SELECT 'admin', 'Administrador', :h, id FROM funciones WHERE nombre = 'Admin'"""),
-                {"h": hash_password("Admin123!")},
+                text("""INSERT INTO usuarios (usuario, nombre, password_hash, funcion_id, debe_cambiar_password)
+                        SELECT 'admin', 'Administrador', :h, id, :cambio FROM funciones WHERE nombre = 'Admin'"""),
+                {"h": hash_password(os.getenv("ADMIN_PASSWORD_INICIAL", "Admin123!")),
+                 "cambio": int(os.getenv("ADMIN_CAMBIO_OBLIGATORIO", "1") != "0")},
             )
         conn.commit()
 

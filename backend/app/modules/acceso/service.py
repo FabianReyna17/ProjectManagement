@@ -48,6 +48,19 @@ def _texto(momento: datetime) -> str:
     return momento.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def password_correcta(password: str, guardado: str) -> bool:
+    """Antes de la v1 las contraseñas se recortaban al guardarse: si la escrita tiene espacios
+    al inicio o al final y no coincide, se prueba también recortada (cuentas anteriores)."""
+    if verificar_password(password, guardado):
+        return True
+    return password != password.strip() and verificar_password(password.strip(), guardado)
+
+
+def validar_password_nueva(password: str) -> None:
+    if not password.strip():
+        raise DatosInvalidos("La contraseña no puede ser solo espacios")
+
+
 def sesion_vigente(db, token: str) -> dict:
     """Cuenta dueña de la sesión. Sesión inexistente, cuenta inactiva o inactividad
     mayor a INACTIVIDAD → NoAutenticado (la sesión vencida se borra)."""
@@ -88,7 +101,7 @@ def iniciar_sesion(db, usuario: str, password: str) -> dict:
     if espera:
         raise DemasiadosIntentos(f"Demasiados intentos fallidos. Espera {espera} s y vuelve a intentarlo")
     row = repo.buscar_por_usuario(db, usuario)
-    valida = verificar_password(password, row["password_hash"] if row else HASH_FICTICIO)
+    valida = password_correcta(password, row["password_hash"] if row else HASH_FICTICIO)
     # Mensaje genérico: no revela si el usuario existe o está inactivo
     if not row or not row["activo"] or not valida:
         INTENTOS.fallo(clave)
@@ -114,8 +127,9 @@ def cerrar_sesion(db, token: str) -> None:
 def cambiar_password(db, u: dict, actual: str, nueva: str) -> None:
     """La persona cambia su contraseña (obligatorio tras un restablecimiento, HU-01-011).
     Las demás sesiones de la cuenta se cierran; la actual sigue."""
-    if not verificar_password(actual, repo.hash_de(db, u["id"]) or HASH_FICTICIO):
+    if not password_correcta(actual, repo.hash_de(db, u["id"]) or HASH_FICTICIO):
         raise DatosInvalidos("La contraseña actual no es correcta")
+    validar_password_nueva(nueva)
     if nueva == actual:
         raise DatosInvalidos("La nueva contraseña debe ser distinta de la actual")
     with transaccion(db):
@@ -161,6 +175,7 @@ def registrar_usuario(db, usuario: str, nombre: str, password: str, funcion_id: 
     en lugar de responder que el identificador existe."""
     if not repo.existe_funcion(db, funcion_id):
         raise DatosInvalidos("La función seleccionada no existe")
+    validar_password_nueva(password)
 
     def insertar() -> int:
         nuevo = repo.insertar_usuario(db, usuario, nombre, hash_password(password), funcion_id)

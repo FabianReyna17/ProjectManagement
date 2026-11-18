@@ -53,7 +53,7 @@ async function vistaCambiosAcceso(filtro, id) {
       ${eventos.length ? `
         <div class="tabla-marco">
           <table class="tabla tabla-tarjetas" id="tabla-accesos">
-            <thead><tr>${th("Fecha", { clase: "col-principal" })}${th("Persona")}${th("Cambio")}${th("Proyecto")}${th("Antes → después", { ordenable: false })}${th("Hecho por")}</tr></thead>
+            <thead><tr>${th("Fecha", { clase: "col-principal" })}${th("Persona")}${th("Cambio")}${th("Proyecto")}${th("Antes → después")}${th("Hecho por")}</tr></thead>
             <tbody>
               ${eventos.map((x) => `
                 <tr>

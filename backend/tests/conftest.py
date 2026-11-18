@@ -10,6 +10,7 @@ def bd_limpia(tmp_path, monkeypatch):
     monkeypatch.setenv("AVISOS_CADA_MIN", "0")  # el proceso programado se llama a mano en las pruebas
     monkeypatch.setenv("RESPALDO_CADA_HORAS", "0")  # el respaldo también
     monkeypatch.setenv("RESPALDOS_DIR", str(tmp_path / "respaldos"))
+    monkeypatch.setenv("ADMIN_CAMBIO_OBLIGATORIO", "0")  # las pruebas entran con admin / Admin123!
 
 
 @pytest.fixture(autouse=True)

@@ -5,9 +5,22 @@ const TEXTO_AVISO = {
   asignacion: (a) => `${escapar(a.actor_nombre)} te asignó la tarea ${enlaceAviso(a, a.tarea_nombre)}`,
   bloqueo: (a) => `${escapar(a.actor_nombre)} reportó un bloqueo en la tarea ${enlaceAviso(a, a.tarea_nombre)} ` +
     (a.bloqueo_resuelto ? `<span class="chip chip-resuelto">${icono("ok")}Resuelto</span>` : etiquetaBloqueo()),
+  // HU-06-004: qué cambió del plan de tu tarea, con el valor anterior y el nuevo
+  cambio_plan: (a) => `${escapar(a.actor_nombre)} cambió ${CAMPO_CAMBIO[a.cambio_campo] || "el plan"} de la tarea ${enlaceAviso(a, a.tarea_nombre)}: ` +
+    `<span class="valor-anterior">${valorCambio(a.cambio_campo, a.cambio_anterior)}</span> → ${valorCambio(a.cambio_campo, a.cambio_nuevo)}`,
+  reasignacion: (a) => `${escapar(a.actor_nombre)} reasignó la tarea ${enlaceAviso(a, a.tarea_nombre)} ` +
+    (a.cambio_nuevo_nombre ? `a ${escapar(a.cambio_nuevo_nombre)}` : "y quedó sin asignar") + "; ya no la tienes a tu cargo",
   // HU-06-002: lo genera el sistema; muestra la fecha límite que tenía la tarea al avisar
   vencimiento: (a) => `${icono("reloj")} La tarea ${enlaceAviso(a, a.tarea_nombre)} que tienes asignada vence el ${fecha(a.fecha_limite)}`,
 };
+
+const CAMPO_CAMBIO = { fecha_limite: "la fecha límite", prioridad: "la prioridad" };
+
+function valorCambio(campo, valor) {
+  if (campo === "fecha_limite") return fecha(valor, "Sin fecha");
+  if (campo === "prioridad") return escapar(PRIORIDADES[valor] || valor);
+  return escapar(valor ?? "—");
+}
 
 /** El enlace pasa por #/avisos/{id}: lo marca como leído y lleva a la tarea si el acceso sigue vigente. */
 function enlaceAviso(a, texto) {
@@ -53,7 +66,7 @@ async function vistaAvisos() {
       </header>
       ${avisos.length
         ? `<ol class="lista-cambios lista-avisos">${avisos.map(itemAviso).join("")}</ol>`
-        : vacio("No tienes avisos", "Cuando te asignen una tarea, se acerque su fecha límite o se bloquee una tarea de un proyecto a tu cargo, te avisaremos aquí.",
+        : vacio("No tienes avisos", "Cuando te asignen una tarea, cambie su plan, se acerque su fecha límite o se bloquee una tarea de un proyecto a tu cargo, te avisaremos aquí.",
                 `<a class="boton secundario" href="#/mis-tareas">Ver mis tareas</a>`)}`,
   };
 }

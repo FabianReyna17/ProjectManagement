@@ -36,6 +36,8 @@ SELECT_AVISO = """SELECT a.id, a.usuario_id, a.tipo, a.creado_en, a.leido_en,
                          a.tarea_id, t.nombre AS tarea_nombre,
                          a.actor_id, u.nombre AS actor_nombre,
                          a.bloqueo_id, b.motivo AS bloqueo_motivo, a.fecha_limite,
+                         h.tipo AS cambio_campo, h.valor_anterior AS cambio_anterior,
+                         h.valor_nuevo AS cambio_nuevo, un.nombre AS cambio_nuevo_nombre,
                          CASE WHEN b.id IS NULL THEN NULL ELSE b.resuelto_en IS NOT NULL END AS bloqueo_resuelto
                   FROM avisos a
                   JOIN proyectos p           ON p.id = a.proyecto_id
@@ -43,7 +45,9 @@ SELECT_AVISO = """SELECT a.id, a.usuario_id, a.tipo, a.creado_en, a.leido_en,
                   LEFT JOIN participantes pa ON pa.proyecto_id = a.proyecto_id
                                             AND pa.usuario_id = a.usuario_id AND pa.activo = 1
                   LEFT JOIN tareas t         ON t.id = a.tarea_id
-                  LEFT JOIN bloqueos b       ON b.id = a.bloqueo_id"""
+                  LEFT JOIN bloqueos b       ON b.id = a.bloqueo_id
+                  LEFT JOIN historial_tareas h ON h.id = a.evento_id AND a.tipo IN ('cambio_plan', 'reasignacion')
+                  LEFT JOIN usuarios un      ON a.tipo = 'reasignacion' AND un.id = h.valor_nuevo"""
 
 
 def listar_de_usuario(db, usuario_id: int) -> list:

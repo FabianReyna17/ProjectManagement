@@ -75,12 +75,14 @@ def test_reasignar_avisa_al_nuevo_responsable(esc4):
     t = crear_tarea(esc4, responsable_id=esc4.beto_id)
     assert asignar(esc4, t["id"], esc4.carla_id).status_code == 200
     assert [a["tarea_id"] for a in avisos(esc4, esc4.carla)] == [t["id"]]
-    assert len(avisos(esc4, esc4.beto)) == 1  # el aviso anterior se conserva y no llega otro
+    # (desde HU-06-004 beto también recibe un aviso de reasignación; aquí se cuentan las asignaciones)
+    asignaciones = lambda: [a for a in avisos(esc4, esc4.beto) if a["tipo"] == "asignacion"]
+    assert len(asignaciones()) == 1  # el aviso anterior se conserva y no llega otro
 
     assert replanificar(esc4, t["id"], responsable_id=esc4.beto_id).status_code == 200
-    assert len(avisos(esc4, esc4.beto)) == 2  # vuelve a recibirla: es otra asignación
+    assert len(asignaciones()) == 2  # vuelve a recibirla: es otra asignación
     assert replanificar(esc4, t["id"], responsable_id=esc4.beto_id, prioridad="alta").status_code == 200
-    assert len(avisos(esc4, esc4.beto)) == 2  # cambiar solo la prioridad no es una asignación
+    assert len(asignaciones()) == 2  # cambiar solo la prioridad no es una asignación
 
 
 def test_asignarse_a_si_mismo_no_genera_aviso(esc4):

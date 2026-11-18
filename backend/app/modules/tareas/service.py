@@ -1,10 +1,11 @@
-"""Reglas de tareas (HU-02-005, HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001 a HU-06-003, HU-07-001 a HU-07-005, HU-08-002, HU-08-003).
+"""Reglas de tareas (HU-02-005, HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001 a HU-06-004, HU-07-001 a HU-07-005, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
 Las tareas de un proyecto cerrado solo se consultan: ningún cambio se acepta.
 Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
-Cada asignación avisa a la nueva persona responsable y cada bloqueo al responsable del
+Cada asignación avisa a la nueva persona responsable (y a la anterior, HU-06-004), cada
+cambio de fecha o prioridad a quien tiene la tarea, y cada bloqueo al responsable del
 proyecto, en la misma transacción que el cambio.
 """
 from datetime import date, timedelta
@@ -71,11 +72,26 @@ def crear(db, proyecto: dict, actor_id: int, nombre: str, descripcion: str,
     return repo.obtener(db, crear_una_vez(db, actor_id, clave, "tarea", insertar))
 
 
+def _con_acceso(db, proyecto_id: int, usuario_id: Optional[int]) -> Optional[int]:
+    """La persona, solo si aún participa en el proyecto (a quien ya no tiene acceso no se le avisa)."""
+    return usuario_id if usuario_id is not None and proyectos.es_participante(db, proyecto_id, usuario_id) else None
+
+
 def _registrar_asignacion(db, tarea_id: int, proyecto_id: int, anterior: Optional[int],
                           nuevo: Optional[int], actor_id: int) -> None:
-    """Historial del cambio de responsable y aviso a quien recibe la tarea (HU-06-001)."""
+    """Historial del cambio de responsable y aviso a quien recibe la tarea (HU-06-001) y a
+    quien la tenía (HU-06-004), ligados al mismo evento: un reintento no los duplica."""
     evento = repo.registrar_cambio(db, tarea_id, "responsable", anterior, nuevo, actor_id)
     avisos.avisar_asignacion(db, proyecto_id, tarea_id, nuevo, actor_id, evento)
+    avisos.avisar_reasignacion(db, proyecto_id, tarea_id, _con_acceso(db, proyecto_id, anterior), actor_id, evento)
+
+
+def _registrar_cambio_plan(db, tarea: dict, tipo: str, anterior, nuevo, actor_id: int,
+                           avisar_a: Optional[int]) -> None:
+    """Historial de un cambio de fecha límite o prioridad y aviso a quien tiene la tarea (HU-06-004)."""
+    evento = repo.registrar_cambio(db, tarea["id"], tipo, anterior, nuevo, actor_id)
+    avisos.avisar_cambio_plan(db, tarea["proyecto_id"], tarea["id"], _con_acceso(db, tarea["proyecto_id"], avisar_a),
+                              actor_id, evento)
 
 
 def obtener_autorizada(db, tarea_id: int, usuario_id: int) -> dict:
@@ -296,7 +312,7 @@ def planificar(db, tarea: dict, actor_id: int, fecha_limite: Optional[date], pri
         with transaccion(db):
             repo.actualizar_plan(db, tarea["id"], nueva_fecha, prioridad)
             for campo, anterior, nuevo in cambios:
-                repo.registrar_cambio(db, tarea["id"], campo, anterior, nuevo, actor_id)
+                _registrar_cambio_plan(db, tarea, campo, anterior, nuevo, actor_id, tarea["responsable_id"])
     return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
 
 
@@ -325,6 +341,10 @@ def replanificar(db, tarea: dict, actor_id: int, responsable_id: Optional[int],
         raise _conflicto_plan(tarea, en_conflicto)
     if responsable_id is not None and any(campo == "responsable_id" for campo, _, _ in cambios):
         _validar_responsable(db, tarea["proyecto_id"], responsable_id)
+    # HU-06-004: si en la misma confirmación cambia el responsable, la nueva persona ya recibe
+    # el aviso de asignación con el plan vigente; los de fecha o prioridad son para quien la conserva
+    reasignada = any(campo == "responsable_id" for campo, _, _ in cambios)
+    avisar_a = None if reasignada else tarea["responsable_id"]
     if cambios:
         with transaccion(db):
             for campo, leido, nuevo in cambios:
@@ -333,7 +353,7 @@ def replanificar(db, tarea: dict, actor_id: int, responsable_id: Optional[int],
                 if campo == "responsable_id":
                     _registrar_asignacion(db, tarea["id"], tarea["proyecto_id"], leido, nuevo, actor_id)
                 else:
-                    repo.registrar_cambio(db, tarea["id"], TIPO_HISTORIAL[campo], leido, nuevo, actor_id)
+                    _registrar_cambio_plan(db, tarea, TIPO_HISTORIAL[campo], leido, nuevo, actor_id, avisar_a)
     return detalle(obtener_autorizada(db, tarea["id"], actor_id), actor_id)
 
 

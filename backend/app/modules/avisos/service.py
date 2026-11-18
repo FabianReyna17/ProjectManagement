@@ -1,4 +1,4 @@
-"""Avisos dentro de la aplicación (HU-06-001, HU-06-002, HU-06-003, HU-06-005).
+"""Avisos dentro de la aplicación (HU-06-001 a HU-06-005).
 
 No importa FastAPI ni otros módulos. Las funciones que generan avisos no abren
 transacción: se llaman dentro de la del cambio que los origina, así un cambio que
@@ -17,10 +17,13 @@ from . import repository as repo
 ASIGNACION = "asignacion"
 BLOQUEO = "bloqueo"
 VENCIMIENTO = "vencimiento"
+CAMBIO_PLAN = "cambio_plan"
+REASIGNACION = "reasignacion"
 
 # Datos que solo se muestran con acceso vigente al proyecto
 PROTEGIDOS = ("proyecto_id", "proyecto_nombre", "tarea_id", "tarea_nombre", "actor_id", "actor_nombre",
-              "bloqueo_id", "bloqueo_motivo", "bloqueo_resuelto", "fecha_limite")
+              "bloqueo_id", "bloqueo_motivo", "bloqueo_resuelto", "fecha_limite",
+              "cambio_campo", "cambio_anterior", "cambio_nuevo", "cambio_nuevo_nombre")
 
 
 def avisar_asignacion(db, proyecto_id: int, tarea_id: int, usuario_id: Optional[int],
@@ -39,6 +42,24 @@ def avisar_bloqueo(db, proyecto_id: int, tarea_id: int, responsable_proyecto_id:
     if responsable_proyecto_id == actor_id:
         return
     repo.insertar(db, responsable_proyecto_id, BLOQUEO, proyecto_id, tarea_id, evento_id, actor_id, bloqueo_id)
+
+
+def avisar_cambio_plan(db, proyecto_id: int, tarea_id: int, usuario_id: Optional[int],
+                       actor_id: int, evento_id: int) -> None:
+    """HU-06-004: a la persona asignada le cambiaron la fecha límite o la prioridad de su tarea.
+    El aviso apunta al evento del historial (qué cambió, valor anterior y nuevo); quien hizo
+    el cambio no se avisa a sí mismo. Quien llama comprueba que la persona aún tenga acceso."""
+    if usuario_id is None or usuario_id == actor_id:
+        return
+    repo.insertar(db, usuario_id, CAMBIO_PLAN, proyecto_id, tarea_id, evento_id, actor_id)
+
+
+def avisar_reasignacion(db, proyecto_id: int, tarea_id: int, anterior_id: Optional[int],
+                        actor_id: int, evento_id: int) -> None:
+    """HU-06-004: a quien tenía la tarea le avisa que pasó a otra persona (o quedó sin asignar)."""
+    if anterior_id is None or anterior_id == actor_id:
+        return
+    repo.insertar(db, anterior_id, REASIGNACION, proyecto_id, tarea_id, evento_id, actor_id)
 
 
 def avisar_vencimiento(db, proyecto_id: int, tarea_id: int, usuario_id: int, fecha_limite: str) -> bool:

@@ -349,3 +349,83 @@ def test_carga_sin_proyectos_cerrados(con_carga):
     assert cerrar(con_carga, justificacion="Se cancela").status_code == 200
     personas, sin_asignar = resumen_carga(carga(con_carga, con_carga.sofia))
     assert personas == {"Ana": (1, 0, 0)} and sin_asignar == (1, 0, 0)
+
+
+# HU-06-004 Aviso de cambio relevante
+def avisos_tipo(e, h, *tipos):
+    return [a for a in e.c.get("/api/avisos", headers=h).json() if a["tipo"] in tipos]
+
+
+def planificar(e, tid, fecha_limite=None, prioridad="media", h=None):
+    return e.c.put(f"/api/tareas/{tid}/planificacion", headers=h or e.ana,
+                   json={"fecha_limite": fecha_limite, "prioridad": prioridad})
+
+
+@pytest.fixture()
+def esc6(esc):
+    """carla también participa en el proyecto."""
+    assert esc.c.post(f"/api/proyectos/{esc.pid}/participantes", headers=esc.ana,
+                      json={"usuario_id": esc.carla_id}).status_code == 201
+    return esc
+
+
+def test_cambio_de_fecha_o_prioridad_avisa_a_quien_tiene_la_tarea(esc6):
+    t = crear_tarea(esc6, responsable_id=esc6.beto_id, fecha_limite="2026-12-01")
+    assert planificar(esc6, t["id"], "2026-12-05", "alta").status_code == 200
+    cambios = {a["cambio_campo"]: a for a in avisos_tipo(esc6, esc6.beto, "cambio_plan")}
+    assert set(cambios) == {"fecha_limite", "prioridad"}
+    fecha = cambios["fecha_limite"]
+    assert (fecha["cambio_anterior"], fecha["cambio_nuevo"], fecha["actor_nombre"], fecha["tarea_id"]) == \
+        ("2026-12-01", "2026-12-05", "Ana", t["id"])
+    assert (cambios["prioridad"]["cambio_anterior"], cambios["prioridad"]["cambio_nuevo"]) == ("media", "alta")
+    # reintento del mismo cambio: no hay cambio confirmado nuevo, no hay aviso nuevo
+    assert planificar(esc6, t["id"], "2026-12-05", "alta").status_code == 200
+    assert len(avisos_tipo(esc6, esc6.beto, "cambio_plan")) == 2
+    assert avisos_tipo(esc6, esc6.ana, "cambio_plan") == []  # quien cambia no se avisa a sí mismo
+
+
+def test_reasignar_avisa_a_quien_la_tenia_y_a_quien_la_recibe(esc6):
+    t = crear_tarea(esc6, responsable_id=esc6.beto_id)
+    r = esc6.c.put(f"/api/tareas/{t['id']}/responsable", headers=esc6.ana, json={"usuario_id": esc6.carla_id})
+    assert r.status_code == 200
+    [quitada] = avisos_tipo(esc6, esc6.beto, "reasignacion")
+    assert (quitada["tarea_id"], quitada["cambio_nuevo_nombre"], quitada["actor_nombre"]) == (t["id"], "Carla", "Ana")
+    assert len(avisos_tipo(esc6, esc6.carla, "asignacion")) == 1
+    # abrir el aviso lleva a la tarea vigente
+    assert esc6.c.post(f"/api/avisos/{quitada['id']}/abrir", headers=esc6.beto).json()["destino"] == \
+        {"tipo": "tarea", "id": t["id"]}
+
+
+def test_replanificar_con_cambio_de_responsable_no_duplica_avisos(esc6):
+    t = crear_tarea(esc6, responsable_id=esc6.beto_id, fecha_limite="2026-12-01")
+    r = esc6.c.put(f"/api/tareas/{t['id']}/plan", headers=esc6.ana,
+                   json={"responsable_id": esc6.carla_id, "fecha_limite": "2026-12-10", "prioridad": "alta"})
+    assert r.status_code == 200, r.text
+    assert [a["tipo"] for a in avisos_tipo(esc6, esc6.carla, "asignacion", "cambio_plan")] == ["asignacion"]
+    assert [a["tipo"] for a in avisos_tipo(esc6, esc6.beto, "reasignacion", "cambio_plan")] == ["reasignacion"]
+    # sin cambio de responsable, quien la tiene recibe un aviso por cada dato que cambió
+    esc6.c.put(f"/api/tareas/{t['id']}/plan", headers=esc6.ana,
+               json={"responsable_id": esc6.carla_id, "fecha_limite": "2026-12-12", "prioridad": "alta"})
+    assert [a["cambio_campo"] for a in avisos_tipo(esc6, esc6.carla, "cambio_plan")] == ["fecha_limite"]
+
+
+def test_sin_aviso_si_el_cambio_no_se_confirma_o_sin_acceso(esc6):
+    t = crear_tarea(esc6, responsable_id=esc6.beto_id, fecha_limite="2026-12-01")
+    # conflicto (HU-08-003): no se guarda y no avisa
+    r = esc6.c.put(f"/api/tareas/{t['id']}/plan", headers=esc6.ana, json={
+        "responsable_id": esc6.beto_id, "fecha_limite": "2026-12-09", "prioridad": "media",
+        "anteriores": {"responsable_id": esc6.beto_id, "fecha_limite": "2026-11-30", "prioridad": "media"}})
+    assert r.status_code == 409
+    assert esc6.c.put(f"/api/tareas/{t['id']}/responsable", headers=esc6.ana, json={"usuario_id": 9999}).status_code == 400
+    assert avisos_tipo(esc6, esc6.beto, "cambio_plan", "reasignacion") == []
+    # beto pierde el acceso: reasignar su tarea ya no le avisa
+    assert esc6.c.delete(f"/api/proyectos/{esc6.pid}/participantes/{esc6.beto_id}", headers=esc6.ana).status_code == 200
+    assert esc6.c.put(f"/api/tareas/{t['id']}/responsable", headers=esc6.ana, json={"usuario_id": esc6.carla_id}).status_code == 200
+    assert avisos_tipo(esc6, esc6.beto, "reasignacion") == []
+
+
+def test_quien_se_cambia_su_propia_tarea_no_se_avisa(esc6):
+    t = crear_tarea(esc6, responsable_id=esc6.ana_id)
+    assert planificar(esc6, t["id"], "2026-12-01", "baja").status_code == 200
+    assert esc6.c.put(f"/api/tareas/{t['id']}/responsable", headers=esc6.ana, json={"usuario_id": esc6.beto_id}).status_code == 200
+    assert avisos_tipo(esc6, esc6.ana, "cambio_plan", "reasignacion") == []

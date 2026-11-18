@@ -5,6 +5,7 @@ Sistema web para planificar proyectos, asignar tareas y dar seguimiento a su ava
 - **Backend:** Python · FastAPI · SQLAlchemy Core · Alembic · SQLite
 - **Frontend:** HTML, CSS y JavaScript sin frameworks ni paso de build, servido por el mismo backend
 - **Arquitectura:** [docs/Arquitectura_Gestion_Proyectos.md](docs/Arquitectura_Gestion_Proyectos.md) (monolito modular)
+- **Versión:** 1.0.0 ([cambios](CHANGELOG.md)) · instalación en el cliente: [docs/Despliegue.md](docs/Despliegue.md)
 
 ## Ejecutar (Windows)
 
@@ -25,6 +26,7 @@ Abrir <http://localhost:8000>. Cuenta inicial: **admin / Admin123!** (`ADMIN_PAS
 - Los archivos adjuntos se guardan en `backend/data/archivos` (`ARCHIVOS_DIR`), con un máximo de 10 MB por archivo (`ARCHIVO_MAX_MB`).
 - El servidor respalda la BD y los adjuntos una vez al día (`RESPALDO_CADA_HORAS`, 0 lo desactiva) en `backend/data/respaldos` (`RESPALDOS_DIR`; en producción, otro disco) y conserva 14 (`RESPALDOS_CONSERVAR`). A mano: `python -m app.programado respaldo`. Ver [Respaldo y restauración](docs/Respaldo_y_Restauracion.md).
 - La sesión expira tras 8 horas sin actividad (`SESION_INACTIVIDAD_MIN`). Tras 5 intentos fallidos de inicio de sesión con el mismo usuario, cada intento espera 2 s, 4 s, 8 s… hasta 5 min.
+- `GET /api/salud` indica si el proceso y la BD responden, con la versión y el esquema (para el monitoreo).
 
 ## Pruebas
 
@@ -119,6 +121,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 6 | HU-01-010 | Historial de cambios de acceso (solo Admin; ni el responsable del proyecto): altas de cuenta, cambios de función, desactivaciones, restablecimientos y cada alta o retiro de acceso a un proyecto (al crearlo, al agregar o retirar participantes y al cambiar de responsable), con persona, proyecto, actor, fecha y valor anterior y nuevo. Vista "Historial de accesos" desde Usuarios, filtrable por persona o proyecto. Los eventos solo se agregan: cambiar o desactivar una cuenta no altera los anteriores. La migración 0021 carga lo anterior desde cuentas y participantes con actor "No registrado" — `GET /api/cambios-acceso?usuario_id=&proyecto_id=` |
 | 6 | TEC-02 | Correcciones y regresión: el admin inicial debe cambiar su contraseña al primer ingreso (`ADMIN_PASSWORD_INICIAL`); las contraseñas ya no se recortan (las guardadas recortadas siguen sirviendo y no se aceptan solo espacios); en "Usuarios" la tabla de cuentas va a todo el ancho para que sus acciones no queden cortadas. `tests/test_regresion_permisos.py` recorre todas las rutas de la API: sin sesión, con cuenta desactivada o con contraseña temporal pendiente no responden; las de administración solo el Admin; quien no participa recibe 403 en todo lo del proyecto sin que cambie nada |
 | 6 | TEC-02 | Pruebas E2E con Playwright (`tests/e2e`), con la aplicación real en un servidor local y una sesión aislada por persona: el recorrido completo (el admin cambia la contraseña inicial y registra cuentas → la responsable crea el proyecto, da acceso y asigna una tarea → el integrante abre el aviso, inicia la tarea y reporta un bloqueo → la responsable abre el aviso, resuelve, termina y cierra el proyecto); permisos en la interfaz ("Sin acceso" con enlace directo, desactivar una cuenta con la sesión abierta, restablecer acceso y cambio obligatorio, historial de accesos) y uso desde el teléfono sin desbordes. CI las corre en un job aparte |
+| 6 | TEC-02 | Release 1.0.0: `GET /api/salud` (proceso, BD, versión y esquema; 503 sin BD), versión en la API, `requirements-lock.txt` con las versiones exactas probadas, [guía de despliegue](docs/Despliegue.md) (servicio, HTTPS, variables, primer ingreso, verificación, actualización con vuelta atrás y limitaciones conocidas) y [CHANGELOG](CHANGELOG.md) |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 
@@ -144,6 +147,6 @@ Al llegar la historia que lo necesite:
 - Paginación en los listados.
 - PostgreSQL solo si el piloto confirma escritura concurrente o varios procesos; mientras tanto se sigue con SQLite. En ese caso, el freno de intentos (en memoria) debe pasar a un almacén compartido.
 
-## Siguientes sprints
+## Estado
 
-Desactivar cuentas, cambiar funciones, restablecer acceso, historial de accesos y respaldos.
+Versión 1.0.0: las historias de los seis sprints del planning están implementadas. Lo que queda está en "Pendientes técnicos" y en las limitaciones de [Despliegue](docs/Despliegue.md#6-limitaciones-conocidas-de-la-versión-10).

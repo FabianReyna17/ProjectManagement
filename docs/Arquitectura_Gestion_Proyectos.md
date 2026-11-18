@@ -232,6 +232,7 @@ Antes de prometer rendimiento, acordar usuarios simultáneos, volumen de proyect
 | Sprint 3 | Versionado, conflictos y consultas paginadas del tablero | Dos editores no se sobrescriben; cifras y permisos coinciden con el detalle |
 | Sprint 4 | Comentarios, adjuntos privados y avisos transaccionales | Descarga no autorizada rechazada; un cambio confirmado no pierde ni duplica su aviso |
 | Sprint 5 | Recordatorios programados y supervisión | Proceso repetido o ejecutado por dos instancias no duplica avisos |
+| Sprint 6 | Administración de cuentas, respaldo/restauración y release 1.0 | Instalación nueva exige cambiar la contraseña inicial; restauración ensayada en entorno separado y comparada con el origen; regresión de permisos sobre todas las rutas y E2E del recorrido completo ([Despliegue](Despliegue.md)) |
 | Antes de cualquier piloto real | Seguridad de acceso, motor de BD decidido, despliegue reproducible, respaldo/restauración y soporte | Instalación nueva segura, migración con datos, restauración en entorno separado y criterios operativos acordados |
 
 La condición del piloto se aplica aunque algunas funciones previstas para sprints posteriores se pospongan. Esto adelanta la base de recuperación de HU-08-004/005 y las decisiones de acceso necesarias, sin afirmar que esas historias ya estén terminadas. El Sprint 1 suma 31 puntos frente a la velocidad estimada de 25–30; agregar trabajo exige reestimar o retirar alcance, no mantener la misma promesa automáticamente.

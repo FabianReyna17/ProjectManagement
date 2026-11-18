@@ -16,7 +16,7 @@ from .helpers import crear_usuario, login
 from .test_sprint2 import bloquear, crear_tarea, esc  # noqa: F401
 from .test_sprint4 import PDF, adjuntar
 
-PUBLICAS = {("POST", "/api/auth/login")}
+PUBLICAS = {("POST", "/api/auth/login"), ("GET", "/api/salud")}
 # Con la contraseña temporal pendiente solo se permite esto (HU-01-011)
 SIN_CAMBIO_PENDIENTE = {("GET", "/api/auth/me"), ("POST", "/api/auth/logout"), ("POST", "/api/auth/password")}
 SOLO_ADMIN = {

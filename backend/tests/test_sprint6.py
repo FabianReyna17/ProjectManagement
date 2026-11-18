@@ -527,3 +527,15 @@ def test_el_admin_inicial_debe_cambiar_su_contrasena(tmp_path, monkeypatch):
         assert c.post("/api/auth/password", headers=h,
                       json={"actual": "Inicial-2026", "nueva": "Segura-2026"}).status_code == 200
         assert c.get("/api/usuarios", headers=h).status_code == 200
+
+
+# TEC-02 Release
+def test_salud_del_servicio(client, monkeypatch, tmp_path):
+    from app import __version__
+    r = client.get("/api/salud")
+    assert r.status_code == 200
+    assert r.json() == {"estado": "ok", "version": __version__, "esquema": r.json()["esquema"]}
+    assert r.json()["esquema"].isdigit()
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'sin-migrar.db').as_posix()}")  # BD no disponible
+    r = client.get("/api/salud")
+    assert (r.status_code, r.json()["estado"]) == (503, "sin base de datos")

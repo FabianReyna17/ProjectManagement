@@ -7,6 +7,7 @@ const ATAJOS = [
   [[TECLA_MOD, "K"], "Buscar proyecto o tarea, o ejecutar un comando"],
   [["g", "p"], "Ir a Mis proyectos"],
   [["g", "t"], "Ir a Mis tareas"],
+  [["g", "a"], "Ir a Avisos"],
   [["g", "u"], "Ir a Usuarios (solo Admin)"],
   [["n"], "Nueva tarea (en un proyecto que gestionas) o nuevo proyecto (en la lista)"],
   [["/"], "Buscar en la lista de la vista"],
@@ -31,7 +32,7 @@ function mostrarAtajos() {
 
 ACCIONES.atajos = () => mostrarAtajos();
 
-const IR_A = { p: "#/proyectos", t: "#/mis-tareas", u: "#/usuarios" };
+const IR_A = { p: "#/proyectos", t: "#/mis-tareas", a: "#/avisos", u: "#/usuarios" };
 let prefijoG = 0;
 
 document.addEventListener("keydown", (e) => {
@@ -109,6 +110,7 @@ const Paleta = {
     const cmds = [
       { texto: "Ir a Mis proyectos", atajo: "g p", ir: "#/proyectos" },
       { texto: "Ir a Mis tareas", atajo: "g t", ir: "#/mis-tareas" },
+      { texto: "Ir a Avisos", atajo: "g a", ir: "#/avisos" },
     ];
     if (u.funcion === "Admin") cmds.push({ texto: "Ir a Usuarios", atajo: "g u", ir: "#/usuarios" });
     if (VistaActual.nueva) cmds.push({ texto: VistaActual.textoNueva, atajo: "n", ir: VistaActual.nueva });

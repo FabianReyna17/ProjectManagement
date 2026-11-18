@@ -40,13 +40,13 @@ backend/
 │   ├── main.py        # crea la app, traduce errores a HTTP y sirve el frontend
 │   ├── core/          # errores, seguridad, freno de intentos, cabeceras
 │   ├── db/            # conexión, transacciones, migraciones e idempotencia
-│   └── modules/       # acceso, proyectos y tareas: router → service → repository
+│   └── modules/       # acceso, proyectos, tareas y avisos: router → service → repository
 ├── migrations/        # Alembic
 └── tests/
 frontend/
 ├── index.html
 ├── css/               # tokens, base, layout, componentes y vistas
-└── js/                # tema, api, ui, componentes, atajos, tareas y app (scripts clásicos, en ese orden)
+└── js/                # tema, api, ui, componentes, atajos, tareas, avisos y app (scripts clásicos, en ese orden)
 ```
 
 En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación de eventos), lo que permite la CSP estricta del backend.
@@ -84,6 +84,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 3 | HU-07-002 | Filtros por estado, responsable (o sin asignar), prioridad y vencimiento en la lista y el tablero; se combinan, se indican los activos y se quitan con un botón; los aplica el servidor dentro del proyecto autorizado — `?estado=&responsable=&prioridad=&vencimiento=` |
 | 3 | HU-08-003 | El plan de la tarea, su estado y los datos del proyecto se guardan campo por campo solo si nadie cambió ese dato desde que se leyó (UPDATE condicional). Si hubo cambio: 409 con el valor vigente, se avisa, lo escrito se conserva y se puede volver a confirmar; cambios en datos distintos no chocan |
 | 3 | HU-04-006 | Sección "Historial" en el detalle: responsable, fecha, prioridad, estado, avances, bloqueos y resoluciones en orden, con actor y fecha; sin acceso al proyecto no se puede consultar — `GET /api/tareas/{id}/historial` |
+| 4 | HU-06-001 | Al asignar una tarea (al crearla, asignarla o replanificarla) la nueva persona responsable recibe un aviso con tarea, proyecto, quién la asignó y fecha, en la misma transacción que la asignación: si esta falla no queda aviso y un reintento no lo duplica (un aviso por evento del historial). Quien se asigna a sí mismo no recibe aviso. Vista "Avisos" (`g a`) — `GET /api/avisos` |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 
@@ -114,4 +115,4 @@ Al llegar la historia que lo necesite:
 
 ## Siguientes sprints
 
-Avisos, comentarios, desactivar cuentas y respaldos.
+Resto de avisos, comentarios, adjuntos, desactivar cuentas y respaldos.

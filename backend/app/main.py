@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from .core.errors import ErrorNegocio, codigo_http
 from .db.database import init_db
 from .modules.acceso.router import router as acceso_router
+from .modules.avisos.router import router as avisos_router
 from .modules.proyectos.router import router as proyectos_router
 from .modules.tareas.router import router as tareas_router
 
@@ -64,6 +65,7 @@ async def cabeceras_http(request: Request, call_next):
 app.include_router(acceso_router)
 app.include_router(proyectos_router)
 app.include_router(tareas_router)
+app.include_router(avisos_router)
 
 # Frontend estático (se monta al final para no tapar /api)
 if os.path.isdir(FRONTEND_DIR):

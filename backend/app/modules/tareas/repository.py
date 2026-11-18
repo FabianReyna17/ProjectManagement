@@ -151,14 +151,15 @@ def resolver_bloqueo(db, bloqueo_id: int, resolucion: str, actor_id: int) -> boo
 
 # --- Historial ---
 
-def registrar_cambio(db, tarea_id: int, tipo: str, anterior, nuevo, actor_id: int) -> None:
-    db.execute(
+def registrar_cambio(db, tarea_id: int, tipo: str, anterior, nuevo, actor_id: int) -> int:
+    """Devuelve el id de la entrada (el evento al que se ligan los avisos)."""
+    return db.execute(
         text("""INSERT INTO historial_tareas (tarea_id, tipo, valor_anterior, valor_nuevo, actor_id)
                 VALUES (:t, :tipo, :ant, :nuevo, :actor)"""),
         {"t": tarea_id, "tipo": tipo, "actor": actor_id,
          "ant": None if anterior is None else str(anterior),
          "nuevo": None if nuevo is None else str(nuevo)},
-    )
+    ).lastrowid
 
 
 def listar_historial(db, tarea_id: int) -> list:

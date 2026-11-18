@@ -21,6 +21,7 @@ Abrir <http://localhost:8000>. Cuenta inicial: **admin / Admin123!**
 - La BD se crea en `backend/data/gestion.db` y las migraciones pendientes se aplican al arrancar. Para reiniciar, borrar esa carpeta.
 - El esquema se cambia siempre con una migración nueva (`alembic revision -m "descripcion"`), nunca editando tablas a mano.
 - Las tareas vencidas se calculan con el día de Guatemala (`ZONA_HORARIA`) y se avisa desde 3 días antes (`DIAS_POR_VENCER`).
+- Los archivos adjuntos se guardan en `backend/data/archivos` (`ARCHIVOS_DIR`), con un máximo de 10 MB por archivo (`ARCHIVO_MAX_MB`). Un respaldo debe incluir la BD y esa carpeta.
 - La sesión expira tras 8 horas sin actividad (`SESION_INACTIVIDAD_MIN`). Tras 5 intentos fallidos de inicio de sesión con el mismo usuario, cada intento espera 2 s, 4 s, 8 s… hasta 5 min.
 
 ## Pruebas
@@ -88,6 +89,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 4 | HU-06-003 | Al registrar un bloqueo, el responsable del proyecto recibe un aviso con la tarea y el motivo, en la misma transacción; un reintento no lo repite y quien reporta su propio bloqueo no se avisa a sí mismo. Al resolverse, el aviso se conserva marcado "Resuelto" |
 | 4 | HU-06-005 | Bandeja "Avisos" en orden, con los no leídos resaltados y un contador en la navegación; abrir un aviso lo marca como leído y lleva a su tarea; "Marcar todos como leídos". Si se retiró el acceso al proyecto, el aviso se conserva sin datos de la tarea ni del proyecto y abrirlo muestra "Sin acceso" — `GET /api/avisos`, `GET /api/avisos/resumen`, `POST /api/avisos/{id}/abrir`, `POST /api/avisos/leer-todos` |
 | 4 | HU-05-001 | Comentarios en el proyecto y en cada tarea, con autor y fecha, en orden de publicación; cualquier participante comenta, un comentario vacío se rechaza y reasignar la tarea no cambia su autoría. Sin acceso vigente no se leen ni se publican, ni con enlace directo — `POST/GET /api/proyectos/{id}/comentarios`, `POST/GET /api/tareas/{id}/comentarios` |
+| 4 | HU-05-002 | Adjuntar archivos al proyecto o a una tarea (cualquier participante), con nombre, tamaño, autor y fecha. Máximo 10 MB y solo tipos permitidos por extensión (PDF, imágenes, texto, Office/OpenDocument, ZIP); lo demás se rechaza con un mensaje claro y no queda adjunto. Un reintento con la misma `Idempotency-Key` no duplica y una carga que no se confirma no deja archivo en disco. La descarga comprueba el acceso vigente: una URL guardada no sirve a quien perdió el acceso — `POST/GET /api/proyectos/{id}/archivos`, `POST/GET /api/tareas/{id}/archivos` (cuerpo crudo, `?nombre=`), `GET /api/archivos/{id}/descarga`, `GET /api/archivos/reglas` |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 

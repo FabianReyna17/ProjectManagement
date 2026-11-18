@@ -269,10 +269,11 @@ function bloqueoResuelto(b) {
 // Detalle de una tarea: contenido a la izquierda, propiedades a la derecha (inspector)
 async function vistaTarea(id) {
   const t = await API.get(`/api/tareas/${id}`);
-  const [participantes, bloqueos, avances, cambios, comentarios] = await Promise.all([
+  const [participantes, bloqueos, avances, cambios, comentarios, archivos, reglas] = await Promise.all([
     t.puedo_planificar ? API.get(`/api/proyectos/${t.proyecto_id}/participantes`) : [],
     API.get(`/api/tareas/${id}/bloqueos`), API.get(`/api/tareas/${id}/avances`),
     API.get(`/api/tareas/${id}/historial`), API.get(`/api/tareas/${id}/comentarios`),
+    API.get(`/api/tareas/${id}/archivos`), API.get("/api/archivos/reglas"),
   ]);
   const resueltos = bloqueos.filter((b) => b.resuelto_en).reverse();
   const puedeEstado = t.transiciones.length || t.puedo_bloquear;
@@ -326,6 +327,7 @@ async function vistaTarea(id) {
           </section>
 
           ${seccionComentarios(comentarios, "esta tarea")}
+          ${seccionArchivos(archivos, reglas)}
 
           ${resueltos.length ? `
           <section class="bloque">
@@ -394,6 +396,7 @@ async function vistaTarea(id) {
 
     montar() {
       montarComentarios(`/api/tareas/${id}/comentarios`);  // HU-05-001
+      montarArchivos(`/api/tareas/${id}/archivos`);  // HU-05-002
 
       // HU-04-002 Registrar avance
       const fAvance = document.getElementById("f-avance");

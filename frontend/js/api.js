@@ -61,7 +61,8 @@ const API = {
 
     let res;
     try {
-      res = await fetch(url, { method: metodo, headers, body: body ? JSON.stringify(body) : undefined });
+      const cuerpo = body instanceof Blob ? body : body ? JSON.stringify(body) : undefined;  // Blob: archivo (HU-05-002)
+      res = await fetch(url, { method: metodo, headers, body: cuerpo });
     } catch {
       throw new ErrorApi("No se pudo conectar con el servidor. No se guardó nada; inténtalo de nuevo");
     }
@@ -80,6 +81,34 @@ const API = {
   // HU-08-002: creación con clave de operación; repetir la misma clave no duplica
   crear(url, body, clave) { return this.request("POST", url, body, { "Idempotency-Key": clave }); },
   put(url, body) { return this.request("PUT", url, body); },
+
+  /** HU-05-002: sube un archivo como cuerpo crudo, con su nombre en ?nombre= y clave de operación. */
+  subir(url, archivo, clave) {
+    return this.request("POST", `${url}?nombre=${encodeURIComponent(archivo.name)}`, archivo,
+      { "Content-Type": "application/octet-stream", "Idempotency-Key": clave });
+  },
+
+  /** Descarga con la sesión (un enlace simple no lleva el token) y la guarda con su nombre. */
+  async descargar(url, nombre) {
+    let res;
+    try {
+      res = await fetch(url, { headers: { Authorization: `Bearer ${this.token()}` } });
+    } catch {
+      throw new ErrorApi("No se pudo conectar con el servidor. Inténtalo de nuevo");
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) this.sesionPerdida(data.detail);
+      throw new ErrorApi(data.detail || `Error ${res.status}`, res.status);
+    }
+    const enlace = document.createElement("a");
+    enlace.href = URL.createObjectURL(await res.blob());
+    enlace.download = nombre;
+    document.body.append(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(enlace.href), 10000);
+  },
   del(url) { return this.request("DELETE", url); },
 
   /** Datos vigentes de la cuenta (la función pudo cambiar con la sesión abierta, RP-04). */

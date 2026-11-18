@@ -322,3 +322,113 @@ def test_reintentar_comentario_no_lo_duplica(esc):
     a = comentar(esc, url, esc.beto, "Listo el acta", clave="com-1").json()
     b = comentar(esc, url, esc.beto, "Listo el acta", clave="com-1").json()
     assert a["id"] == b["id"] and len(comentarios(esc, url, esc.ana)) == 1
+
+
+# HU-05-002 Adjuntar archivo
+PDF = b"%PDF-1.4 acta de la reunion"
+
+
+def adjuntar(e, url, h, nombre="acta.pdf", contenido=PDF, clave=None):
+    cab = {**h, "Content-Type": "application/octet-stream", **({"Idempotency-Key": clave} if clave else {})}
+    return e.c.post(f"{url}/archivos", params={"nombre": nombre}, headers=cab, content=contenido)
+
+
+def archivos(e, url, h):
+    r = e.c.get(f"{url}/archivos", headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def guardados(tmp_path):
+    carpeta = tmp_path / "archivos"
+    return sorted(p.name for p in carpeta.iterdir()) if carpeta.exists() else []
+
+
+def test_adjuntar_archivo_a_tarea_y_proyecto(esc):
+    t = crear_tarea(esc)
+    tarea, proyecto = f"/api/tareas/{t['id']}", f"/api/proyectos/{esc.pid}"
+    r = adjuntar(esc, tarea, esc.beto)
+    assert r.status_code == 201, r.text
+    f = r.json()
+    assert (f["nombre"], f["tipo"], f["tamano"], f["autor_nombre"]) == ("acta.pdf", "application/pdf", len(PDF), "Beto")
+    assert f["creado_en"] and f["tarea_id"] == t["id"] and "almacen" not in f
+    assert adjuntar(esc, proyecto, esc.ana, "plan.xlsx", b"PK\x03\x04hoja").status_code == 201
+
+    assert [x["nombre"] for x in archivos(esc, tarea, esc.ana)] == ["acta.pdf"]
+    assert [x["nombre"] for x in archivos(esc, proyecto, esc.beto)] == ["plan.xlsx"]  # no mezcla los de la tarea
+
+    d = esc.c.get(f"/api/archivos/{f['id']}/descarga", headers=esc.ana)
+    assert d.status_code == 200 and d.content == PDF
+    assert d.headers["content-type"] == "application/pdf"
+    assert d.headers["content-disposition"] == "attachment; filename*=UTF-8''acta.pdf"
+
+
+def test_tipo_no_permitido_se_rechaza(esc, tmp_path):
+    t = crear_tarea(esc)
+    for nombre in ("virus.exe", "pagina.html", "script.js", "sin_extension"):
+        r = adjuntar(esc, f"/api/tareas/{t['id']}", esc.ana, nombre, b"MZ...")
+        assert r.status_code == 400 and "no está permitido" in r.json()["detail"]
+    assert archivos(esc, f"/api/tareas/{t['id']}", esc.ana) == [] and guardados(tmp_path) == []
+
+
+def test_archivo_demasiado_grande_o_vacio_se_rechaza(esc, tmp_path, monkeypatch):
+    from app.modules.colaboracion import service
+    monkeypatch.setattr(service, "MAX_BYTES", 10)
+    url = f"/api/proyectos/{esc.pid}"
+    r = adjuntar(esc, url, esc.ana, "grande.txt", b"x" * 11)
+    assert r.status_code == 400 and "tamaño máximo" in r.json()["detail"]
+    assert adjuntar(esc, url, esc.ana, "justo.txt", b"x" * 10).status_code == 201
+    assert adjuntar(esc, url, esc.ana, "vacio.txt", b"").status_code == 400
+    assert [x["nombre"] for x in archivos(esc, url, esc.ana)] == ["justo.txt"] and len(guardados(tmp_path)) == 1
+
+
+def test_nombre_de_archivo_sin_rutas(esc):
+    f = adjuntar(esc, f"/api/proyectos/{esc.pid}", esc.ana, "../../etc/informe final.pdf").json()
+    assert f["nombre"] == "informe final.pdf"
+    f = adjuntar(esc, f"/api/proyectos/{esc.pid}", esc.ana, "C:\\Users\\ana\\Escritorio\\Año 2026.pdf").json()
+    assert f["nombre"] == "Año 2026.pdf"
+    d = esc.c.get(f"/api/archivos/{f['id']}/descarga", headers=esc.ana)
+    assert d.headers["content-disposition"] == "attachment; filename*=UTF-8''A%C3%B1o%202026.pdf"
+
+
+def test_reintentar_carga_no_duplica(esc, tmp_path):
+    url = f"/api/tareas/{crear_tarea(esc)['id']}"
+    a = adjuntar(esc, url, esc.ana, clave="subida-1").json()
+    b = adjuntar(esc, url, esc.ana, clave="subida-1").json()
+    assert a["id"] == b["id"]
+    assert len(archivos(esc, url, esc.ana)) == 1 and len(guardados(tmp_path)) == 1  # tampoco queda una copia en disco
+
+
+def test_carga_que_no_se_confirma_no_deja_adjunto(esc, tmp_path, monkeypatch):
+    from app.modules.colaboracion import repository
+
+    def falla(*args, **kwargs):
+        raise RuntimeError("disco lleno")
+
+    real = repository.insertar_archivo
+    monkeypatch.setattr(repository, "insertar_archivo", falla)
+    with pytest.raises(RuntimeError):
+        adjuntar(esc, f"/api/proyectos/{esc.pid}", esc.ana)
+    monkeypatch.setattr(repository, "insertar_archivo", real)
+    assert archivos(esc, f"/api/proyectos/{esc.pid}", esc.ana) == [] and guardados(tmp_path) == []
+
+
+def test_sin_acceso_no_adjunta_ni_descarga(esc):
+    t = crear_tarea(esc)
+    f = adjuntar(esc, f"/api/tareas/{t['id']}", esc.ana).json()
+    for url in (f"/api/tareas/{t['id']}", f"/api/proyectos/{esc.pid}"):
+        assert adjuntar(esc, url, esc.carla).status_code == 403
+        assert esc.c.get(f"{url}/archivos", headers=esc.carla).status_code == 403
+    descarga = f"/api/archivos/{f['id']}/descarga"
+    assert esc.c.get(descarga, headers=esc.carla).status_code == 403   # URL directa sin acceso
+    assert esc.c.get(descarga).status_code == 401                      # sin sesión
+    assert esc.c.get("/api/archivos/9999/descarga", headers=esc.ana).status_code == 403
+
+    assert esc.c.get(descarga, headers=esc.beto).status_code == 200
+    esc.c.delete(f"/api/proyectos/{esc.pid}/participantes/{esc.beto_id}", headers=esc.ana)
+    assert esc.c.get(descarga, headers=esc.beto).status_code == 403    # enlace anterior tras perder el acceso
+
+
+def test_reglas_de_archivos(esc):
+    r = esc.c.get("/api/archivos/reglas", headers=esc.beto).json()
+    assert r["max_bytes"] == 10 * 1024 * 1024 and "pdf" in r["extensiones"] and "exe" not in r["extensiones"]

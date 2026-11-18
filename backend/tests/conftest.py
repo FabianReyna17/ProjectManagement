@@ -1,4 +1,4 @@
-"""Cada prueba usa su propia BD SQLite vacía en una carpeta temporal."""
+"""Cada prueba usa su propia BD SQLite vacía y su carpeta de archivos en una carpeta temporal."""
 import pytest
 from fastapi.testclient import TestClient
 
@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture(autouse=True)
 def bd_limpia(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
+    monkeypatch.setenv("ARCHIVOS_DIR", str(tmp_path / "archivos"))
 
 
 @pytest.fixture(autouse=True)

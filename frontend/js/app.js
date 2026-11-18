@@ -435,10 +435,11 @@ async function vistaProyecto(id) {
   const modo = vistaTareasElegida();
   const filtros = filtrosTareas(id);
   const hayFiltros = Object.keys(filtros).length > 0;
-  const [participantes, datosTareas, usuarios, cambios, comentarios] = await Promise.all([
+  const [participantes, datosTareas, usuarios, cambios, comentarios, archivos, reglas] = await Promise.all([
     API.get(`/api/proyectos/${id}/participantes`), API.get(`/api/proyectos/${id}/${modo}${consultaFiltros(filtros)}`),
     p.soy_responsable ? API.get("/api/usuarios") : [], API.get(`/api/proyectos/${id}/historial`),
-    API.get(`/api/proyectos/${id}/comentarios`),
+    API.get(`/api/proyectos/${id}/comentarios`), API.get(`/api/proyectos/${id}/archivos`),
+    API.get("/api/archivos/reglas"),
   ]);
   const tareas = modo === "tablero" ? datosTareas.columnas.flatMap((c) => c.tareas) : datosTareas;
   const ids = new Set(participantes.map((x) => x.id));
@@ -523,6 +524,7 @@ async function vistaProyecto(id) {
       </section>
 
       ${seccionComentarios(comentarios, "el proyecto")}
+      ${seccionArchivos(archivos, reglas)}
 
       ${cambios.length ? `
       <section class="bloque" aria-labelledby="titulo-cambios">
@@ -532,6 +534,7 @@ async function vistaProyecto(id) {
 
     montar() {
       montarComentarios(`/api/proyectos/${id}/comentarios`);  // HU-05-001
+      montarArchivos(`/api/proyectos/${id}/archivos`);  // HU-05-002
 
       // HU-07-002: cada cambio de filtro vuelve a consultar al servidor
       const fFiltros = document.getElementById("f-filtros");

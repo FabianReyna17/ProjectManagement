@@ -101,6 +101,21 @@
 
 .comentario-autor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--e-2); }
 
+/* Botón con aspecto de enlace (descarga de archivos, HU-05-002) */
+.enlace {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--acento);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.enlace:hover { text-decoration: underline; }
+.archivo .meta { margin-left: var(--e-2); }
+.archivo p + .meta, .archivo > .meta { margin-left: 0; }
+
 /* ---------- Avisos (HU-06-005) ---------- */
 
 .lista-avisos > li.no-leido { background: var(--acento-suave); }

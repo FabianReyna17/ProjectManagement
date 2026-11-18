@@ -97,6 +97,20 @@
 .form-avance { margin-top: var(--e-3); }
 .pista-campo { color: var(--texto-2); font-size: var(--t-sm); }
 
+/* ---------- Avisos (HU-06-005) ---------- */
+
+.lista-avisos > li.no-leido { background: var(--acento-suave); }
+.lista-avisos > li.no-leido > p:first-child { font-weight: var(--peso-medio); }
+.punto-nuevo {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--e-2);
+  border-radius: 50%;
+  background: var(--acento);
+  vertical-align: 1px;
+}
+
 /* ---------- Filtros de tareas (HU-07-002) ---------- */
 
 .filtros-tareas {

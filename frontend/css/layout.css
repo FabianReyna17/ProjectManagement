@@ -94,6 +94,19 @@ main {
 }
 .nav-principal a[aria-current] .icono { color: var(--acento); }
 
+/* HU-06-005: avisos sin leer */
+.insignia-avisos {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--acento);
+  color: var(--sobre-acento);
+  font: var(--peso-fuerte) 11px / 18px var(--fuente);
+  text-align: center;
+}
+.nav-principal .insignia-avisos { margin-left: auto; }
+
 .lateral-titulo {
   padding: 0 var(--e-2) var(--e-1);
   color: var(--texto-2);
@@ -148,6 +161,8 @@ main {
   cursor: pointer;
 }
 .nav-inferior .icono { width: 20px; height: 20px; }
+.nav-inferior a { position: relative; }
+.nav-inferior .insignia-avisos { position: absolute; top: 4px; left: calc(50% + 6px); }
 .nav-inferior a[aria-current] { color: var(--acento); box-shadow: inset 0 2px 0 var(--acento); }
 .nav-inferior a:hover { text-decoration: none; color: var(--texto); }
 

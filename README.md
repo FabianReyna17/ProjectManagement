@@ -86,6 +86,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 3 | HU-04-006 | Sección "Historial" en el detalle: responsable, fecha, prioridad, estado, avances, bloqueos y resoluciones en orden, con actor y fecha; sin acceso al proyecto no se puede consultar — `GET /api/tareas/{id}/historial` |
 | 4 | HU-06-001 | Al asignar una tarea (al crearla, asignarla o replanificarla) la nueva persona responsable recibe un aviso con tarea, proyecto, quién la asignó y fecha, en la misma transacción que la asignación: si esta falla no queda aviso y un reintento no lo duplica (un aviso por evento del historial). Quien se asigna a sí mismo no recibe aviso. Vista "Avisos" (`g a`) — `GET /api/avisos` |
 | 4 | HU-06-003 | Al registrar un bloqueo, el responsable del proyecto recibe un aviso con la tarea y el motivo, en la misma transacción; un reintento no lo repite y quien reporta su propio bloqueo no se avisa a sí mismo. Al resolverse, el aviso se conserva marcado "Resuelto" |
+| 4 | HU-06-005 | Bandeja "Avisos" en orden, con los no leídos resaltados y un contador en la navegación; abrir un aviso lo marca como leído y lleva a su tarea; "Marcar todos como leídos". Si se retiró el acceso al proyecto, el aviso se conserva sin datos de la tarea ni del proyecto y abrirlo muestra "Sin acceso" — `GET /api/avisos`, `GET /api/avisos/resumen`, `POST /api/avisos/{id}/abrir`, `POST /api/avisos/leer-todos` |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 

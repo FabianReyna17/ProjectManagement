@@ -1,15 +1,25 @@
-"""Avisos dentro de la aplicación (HU-06-001, HU-06-003).
+"""Avisos dentro de la aplicación (HU-06-001, HU-06-003, HU-06-005).
 
 No importa FastAPI ni otros módulos. Las funciones que generan avisos no abren
 transacción: se llaman dentro de la del cambio que los origina, así un cambio que
 no se confirma no deja aviso y uno confirmado siempre lo tiene.
+
+Política de acceso (HU-06-005): un aviso nunca se borra. Si la persona ya no participa
+en el proyecto, el aviso sigue en su lista pero sin datos del proyecto, la tarea ni quién
+lo originó, y abrirlo no lleva a ningún recurso.
 """
 from typing import Optional
 
+from ...core.errors import Prohibido
+from ...db.database import transaccion
 from . import repository as repo
 
 ASIGNACION = "asignacion"
 BLOQUEO = "bloqueo"
+
+# Datos que solo se muestran con acceso vigente al proyecto
+PROTEGIDOS = ("proyecto_id", "proyecto_nombre", "tarea_id", "tarea_nombre", "actor_id", "actor_nombre",
+              "bloqueo_id", "bloqueo_motivo", "bloqueo_resuelto")
 
 
 def avisar_asignacion(db, proyecto_id: int, tarea_id: int, usuario_id: Optional[int],
@@ -30,12 +40,42 @@ def avisar_bloqueo(db, proyecto_id: int, tarea_id: int, responsable_proyecto_id:
     repo.insertar(db, responsable_proyecto_id, BLOQUEO, proyecto_id, tarea_id, evento_id, actor_id, bloqueo_id)
 
 
-def _con_estado(aviso: dict) -> dict:
-    """bloqueo_resuelto como booleano; un aviso de bloqueo resuelto se conserva."""
-    if aviso["bloqueo_resuelto"] is not None:
-        aviso["bloqueo_resuelto"] = bool(aviso["bloqueo_resuelto"])
-    return aviso
+def _publico(aviso: dict) -> dict:
+    """Lo que la persona puede ver del aviso según su acceso vigente."""
+    a = {k: v for k, v in aviso.items() if k not in ("usuario_id", "leido_en")}
+    a["leido"] = aviso["leido_en"] is not None
+    a["con_acceso"] = bool(aviso["con_acceso"])
+    if not a["con_acceso"]:
+        a.update(dict.fromkeys(PROTEGIDOS))
+    elif a["bloqueo_resuelto"] is not None:
+        a["bloqueo_resuelto"] = bool(a["bloqueo_resuelto"])  # resuelto: se conserva sin quedar pendiente
+    return a
 
 
 def mis_avisos(db, usuario_id: int) -> list:
-    return [_con_estado(a) for a in repo.listar_de_usuario(db, usuario_id)]
+    return [_publico(a) for a in repo.listar_de_usuario(db, usuario_id)]
+
+
+def no_leidos(db, usuario_id: int) -> int:
+    return repo.contar_no_leidos(db, usuario_id)
+
+
+def abrir(db, aviso_id: int, usuario_id: int) -> dict:
+    """Marca el aviso como leído y dice a dónde lleva: la tarea (o el proyecto) si el acceso
+    sigue vigente; si no, ningún destino. El aviso de otra persona o inexistente → Prohibido."""
+    aviso = repo.obtener(db, aviso_id)
+    if not aviso or aviso["usuario_id"] != usuario_id:
+        raise Prohibido()
+    with transaccion(db):
+        repo.marcar_leido(db, aviso_id)
+    a = _publico({**aviso, "leido_en": aviso["leido_en"] or "ahora"})
+    destino = None
+    if a["con_acceso"]:
+        destino = ({"tipo": "tarea", "id": a["tarea_id"]} if a["tarea_id"]
+                   else {"tipo": "proyecto", "id": a["proyecto_id"]})
+    return {**a, "destino": destino}
+
+
+def marcar_todos_leidos(db, usuario_id: int) -> int:
+    with transaccion(db):
+        return repo.marcar_todos_leidos(db, usuario_id)

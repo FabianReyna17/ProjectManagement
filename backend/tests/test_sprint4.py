@@ -108,11 +108,13 @@ def test_asignacion_fallida_no_deja_aviso(esc, monkeypatch):
     assert avisos(esc, esc.beto) == []
 
 
-def test_avisos_solo_de_proyectos_con_acceso(esc4):
+def test_aviso_sin_acceso_no_revela_detalles(esc4):
     crear_tarea(esc4, responsable_id=esc4.beto_id)
-    assert len(avisos(esc4, esc4.beto)) == 1
+    assert avisos(esc4, esc4.beto)[0]["con_acceso"] is True
     esc4.c.delete(f"/api/proyectos/{esc4.pid}/participantes/{esc4.beto_id}", headers=esc4.ana)
-    assert avisos(esc4, esc4.beto) == []  # sin acceso no se revela la tarea ni el proyecto
+    [aviso] = avisos(esc4, esc4.beto)  # el aviso se conserva, pero sin tarea ni proyecto (HU-06-005)
+    assert aviso["con_acceso"] is False and aviso["tipo"] == "asignacion"
+    assert all(aviso[k] is None for k in ("proyecto_id", "proyecto_nombre", "tarea_id", "tarea_nombre", "actor_nombre"))
 
 
 def test_avisos_requieren_sesion(esc):
@@ -171,3 +173,84 @@ def test_bloqueo_rechazado_no_deja_aviso(esc4):
     esc4.c.put(f"/api/tareas/{t['id']}/estado", headers=esc4.beto, json={"estado": "terminada"})
     assert bloquear(esc4, t["id"], esc4.beto).status_code == 400   # terminada
     assert avisos(esc4, esc4.ana) == []
+
+
+# HU-06-005 Consultar y abrir mis avisos
+def no_leidos(e, h):
+    r = e.c.get("/api/avisos/resumen", headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()["no_leidos"]
+
+
+def abrir(e, aviso_id, h):
+    return e.c.post(f"/api/avisos/{aviso_id}/abrir", headers=h)
+
+
+def test_contador_de_no_leidos(esc4):
+    assert no_leidos(esc4, esc4.beto) == 0
+    crear_tarea(esc4, "Diseño", responsable_id=esc4.beto_id)
+    crear_tarea(esc4, "Maquetar", responsable_id=esc4.beto_id)
+    assert no_leidos(esc4, esc4.beto) == 2
+    assert [a["leido"] for a in avisos(esc4, esc4.beto)] == [False, False]
+    assert no_leidos(esc4, esc4.ana) == 0 and no_leidos(esc4, esc4.carla) == 0
+
+
+def test_abrir_aviso_lleva_a_la_tarea_y_lo_marca_leido(esc4):
+    t = crear_tarea(esc4, "Diseño", responsable_id=esc4.beto_id)
+    crear_tarea(esc4, "Maquetar", responsable_id=esc4.beto_id)
+    reciente, primero = avisos(esc4, esc4.beto)
+
+    r = abrir(esc4, primero["id"], esc4.beto)
+    assert r.status_code == 200, r.text
+    assert r.json()["destino"] == {"tipo": "tarea", "id": t["id"]} and r.json()["leido"] is True
+    assert esc4.c.get(f"/api/tareas/{t['id']}", headers=esc4.beto).status_code == 200  # el destino se puede ver
+    assert [(a["id"], a["leido"]) for a in avisos(esc4, esc4.beto)] == [(reciente["id"], False), (primero["id"], True)]
+    assert no_leidos(esc4, esc4.beto) == 1
+
+    assert abrir(esc4, primero["id"], esc4.beto).status_code == 200  # abrirlo de nuevo no cambia nada
+    assert no_leidos(esc4, esc4.beto) == 1
+
+
+def test_aviso_de_bloqueo_lleva_a_la_tarea_bloqueada(esc4):
+    t = crear_tarea(esc4, responsable_id=esc4.beto_id)
+    esc4.c.post(f"/api/tareas/{t['id']}/bloqueos", headers=esc4.beto, json={"motivo": "Falta el logo"})
+    [aviso] = avisos(esc4, esc4.ana)
+    assert abrir(esc4, aviso["id"], esc4.ana).json()["destino"] == {"tipo": "tarea", "id": t["id"]}
+    assert esc4.c.get(f"/api/tareas/{t['id']}", headers=esc4.ana).json()["bloqueo"]["motivo"] == "Falta el logo"
+
+
+def test_abrir_aviso_sin_acceso_vigente_no_muestra_detalle(esc4):
+    crear_tarea(esc4, responsable_id=esc4.beto_id)
+    [aviso] = avisos(esc4, esc4.beto)
+    esc4.c.delete(f"/api/proyectos/{esc4.pid}/participantes/{esc4.beto_id}", headers=esc4.ana)
+
+    r = abrir(esc4, aviso["id"], esc4.beto)
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["destino"] is None and datos["con_acceso"] is False
+    assert datos["tarea_nombre"] is None and datos["proyecto_nombre"] is None and datos["tarea_id"] is None
+    assert no_leidos(esc4, esc4.beto) == 0  # se trata como leído para no dejar el contador atascado
+
+
+def test_solo_se_abren_los_avisos_propios(esc4):
+    crear_tarea(esc4, responsable_id=esc4.beto_id)
+    [aviso] = avisos(esc4, esc4.beto)
+    assert abrir(esc4, aviso["id"], esc4.carla).status_code == 403
+    assert abrir(esc4, 9999, esc4.beto).status_code == 403  # inexistente: misma respuesta
+    assert no_leidos(esc4, esc4.beto) == 1
+
+
+def test_marcar_todos_como_leidos(esc4):
+    crear_tarea(esc4, "Diseño", responsable_id=esc4.beto_id)
+    crear_tarea(esc4, "Maquetar", responsable_id=esc4.carla_id)
+    r = esc4.c.post("/api/avisos/leer-todos", headers=esc4.beto)
+    assert r.status_code == 200 and r.json() == {"marcados": 1}
+    assert no_leidos(esc4, esc4.beto) == 0 and no_leidos(esc4, esc4.carla) == 1  # solo los propios
+    assert esc4.c.post("/api/avisos/leer-todos", headers=esc4.beto).json() == {"marcados": 0}
+
+
+def test_avisos_nuevos_llegan_sin_leer(esc4):
+    crear_tarea(esc4, "Diseño", responsable_id=esc4.beto_id)
+    esc4.c.post("/api/avisos/leer-todos", headers=esc4.beto)
+    crear_tarea(esc4, "Maquetar", responsable_id=esc4.beto_id)
+    assert [a["leido"] for a in avisos(esc4, esc4.beto)] == [False, True]

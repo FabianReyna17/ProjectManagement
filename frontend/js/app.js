@@ -13,6 +13,7 @@ const rutas = [
   { patron: /^#\/tareas\/(\d+)$/, vista: vistaTarea, esqueleto: "ficha" },
   { patron: /^#\/mis-tareas$/, vista: vistaMisTareas, esqueleto: "tabla" },
   { patron: /^#\/avisos$/, vista: vistaAvisos, esqueleto: "tabla" },
+  { patron: /^#\/avisos\/(\d+)$/, vista: vistaAbrirAviso, esqueleto: "ficha" },
   { patron: /^#\/usuarios$/, vista: vistaUsuarios, esqueleto: "tabla" },
   { patron: /^#\/sin-acceso$/, vista: vistaSinAcceso },
 ];
@@ -55,6 +56,7 @@ async function router({ recarga = false } = {}) {
   // Si la persona ya navegó a otra parte, esta respuesta llegó tarde y no se pinta
   if (id !== navegacion || !vista) return;
   pintar(vista, recarga);
+  if (!ruta.publica && ruta.vista !== vistaAvisos) ContadorAvisos.actualizar();  // la de avisos ya lo pinta
 }
 
 /** Vuelve a consultar la vista actual sin cambiar de ruta (tras guardar, con datos del servidor). */
@@ -188,6 +190,7 @@ async function cerrarSesion() {
   Formularios.descartarTodos();
   Estado.proyectos = [];
   Estado.tareasProyecto = null;
+  ContadorAvisos.pintar(0);
   almacen.borrar("ruta-tras-login", sessionStorage);
   almacen.guardar("aviso-login", "Cerraste tu sesión.", sessionStorage);
   location.hash = "#/login";

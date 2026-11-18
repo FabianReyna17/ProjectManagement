@@ -94,6 +94,9 @@
   border: 1px solid var(--aviso-borde); border-radius: var(--r-2); background: var(--aviso-suave); }
 .credencial-valor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--e-3); }
 .credencial-valor code { font-size: var(--t-lg); letter-spacing: .05em; user-select: all; }
+.resumen-respaldo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--e-2); margin-bottom: var(--e-2); }
+.nota.nota-peligro { border-color: var(--peligro-borde); background: var(--peligro-suave); color: var(--peligro); }
+.nota.nota-peligro .icono { color: var(--peligro); }
 .select-chico { width: auto; min-width: 140px; padding-block: 4px; font-size: var(--t-sm); }
 
 .chip-vencida { border-color: var(--peligro-borde); background: var(--peligro-suave); color: var(--peligro); }

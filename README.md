@@ -22,7 +22,8 @@ Abrir <http://localhost:8000>. Cuenta inicial: **admin / Admin123!**
 - El esquema se cambia siempre con una migración nueva (`alembic revision -m "descripcion"`), nunca editando tablas a mano.
 - Las tareas vencidas se calculan con el día de Guatemala (`ZONA_HORARIA`) y se avisa desde 3 días antes (`DIAS_POR_VENCER`).
 - El aviso de vencimiento cercano lo genera un proceso programado que el servidor corre al arrancar y cada hora (`AVISOS_CADA_MIN`, 0 lo desactiva). También se puede correr aparte, por ejemplo desde el Programador de tareas: `python -m app.programado`. Correrlo de más no repite avisos.
-- Los archivos adjuntos se guardan en `backend/data/archivos` (`ARCHIVOS_DIR`), con un máximo de 10 MB por archivo (`ARCHIVO_MAX_MB`). Un respaldo debe incluir la BD y esa carpeta.
+- Los archivos adjuntos se guardan en `backend/data/archivos` (`ARCHIVOS_DIR`), con un máximo de 10 MB por archivo (`ARCHIVO_MAX_MB`).
+- El servidor respalda la BD y los adjuntos una vez al día (`RESPALDO_CADA_HORAS`, 0 lo desactiva) en `backend/data/respaldos` (`RESPALDOS_DIR`; en producción, otro disco) y conserva 14 (`RESPALDOS_CONSERVAR`). A mano: `python -m app.programado respaldo`. Ver [Respaldo y restauración](docs/Respaldo_y_Restauracion.md).
 - La sesión expira tras 8 horas sin actividad (`SESION_INACTIVIDAD_MIN`). Tras 5 intentos fallidos de inicio de sesión con el mismo usuario, cada intento espera 2 s, 4 s, 8 s… hasta 5 min.
 
 ## Pruebas
@@ -42,13 +43,13 @@ backend/
 │   ├── main.py        # crea la app, traduce errores a HTTP y sirve el frontend
 │   ├── core/          # errores, seguridad, freno de intentos, cabeceras
 │   ├── db/            # conexión, transacciones, migraciones e idempotencia
-│   └── modules/       # acceso, proyectos, tareas, avisos y colaboración: router → service → repository
+│   └── modules/       # acceso, proyectos, tareas, avisos, colaboración y respaldos: router → service → repository
 ├── migrations/        # Alembic
 └── tests/
 frontend/
 ├── index.html
 ├── css/               # tokens, base, layout, componentes y vistas
-└── js/                # tema, api, ui, componentes, atajos, colaboración, tareas, avisos y app (scripts clásicos, en ese orden)
+└── js/                # tema, api, ui, componentes, atajos, colaboración, tareas, avisos, supervisión, respaldos y app (scripts clásicos, en ese orden)
 ```
 
 En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación de eventos), lo que permite la CSP estricta del backend.
@@ -104,6 +105,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 6 | HU-01-009 | Desactivar cuenta (solo Admin, en "Usuarios", con confirmación): la cuenta no puede volver a entrar (mensaje genérico) y sus sesiones abiertas dejan de servir para consultar y actuar. No se borra nada: proyectos, tareas, avances, comentarios e historial conservan su nombre, y en los participantes aparece "Cuenta desactivada"; ya no se le puede asignar trabajo. Se guarda cuándo y quién la desactivó, más un evento de cuenta para el historial de accesos. Desactivar de nuevo no cambia nada; el Admin no puede desactivar su propia cuenta — `POST /api/usuarios/{id}/desactivacion`, `GET /api/usuarios?todas=1` |
 | 6 | HU-01-008 | Cambiar la función de una cuenta (solo Admin, desde la columna "Función" de "Usuarios", con confirmación). Los permisos se leen de la BD en cada petición, así que la nueva función aplica de inmediato aunque la persona tenga la sesión abierta; sus proyectos y tareas no cambian. Cada cambio registra función anterior, nueva, actor y fecha; elegir la misma no registra nada. Nadie cambia su propia función (así siempre queda un Admin) ni la de una cuenta desactivada (409) — `PUT /api/usuarios/{id}/funcion` |
 | 6 | HU-01-011 | Restablecer acceso (solo Admin, en "Usuarios", sobre una cuenta existente y activa que no sea la suya): se genera una contraseña temporal que se muestra una sola vez para entregarla; la anterior y las sesiones abiertas dejan de servir y se quita el freno de intentos. Al entrar con ella solo puede ver su cuenta, cambiarla o salir (el resto responde 403 y la interfaz lleva a "Cambiar contraseña"); al cambiarla la temporal deja de servir. Conserva función, proyectos y autoría, y registra quién lo inició. "Cambiar contraseña" también está en el menú de la cuenta — `POST /api/usuarios/{id}/restablecimiento`, `POST /api/auth/password` |
+| 6 | HU-08-004 | Respaldo periódico de la BD y los adjuntos: un `.zip` con copia consistente de SQLite (cuentas, permisos, proyectos, tareas, avances, bloqueos, comentarios, archivos, avisos e historial), los adjuntos y un manifiesto con filas por tabla y huellas. Se escribe como `.parcial`, se verifica y solo entonces queda disponible. El servidor respalda cuando el último válido tiene más de `RESPALDO_CADA_HORAS` (24) y conserva los `RESPALDOS_CONSERVAR` (14) más recientes; también `python -m app.programado respaldo`. Cada ejecución registra fecha, resultado y detalle; la vista "Respaldos" (`g r`, solo Admin) señala si el último falló o está atrasado y permite respaldar ahora. Se guardan en `RESPALDOS_DIR`, aparte de la información en uso, con permisos restringidos y nunca se sirven por HTTP — `GET/POST /api/respaldos`, [procedimiento](docs/Respaldo_y_Restauracion.md) |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 

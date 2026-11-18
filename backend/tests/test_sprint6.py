@@ -1,6 +1,15 @@
 """Pruebas de API del Sprint 6: administración de cuentas, respaldo y release."""
+import os
+import sqlite3
+import zipfile
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
+
 from .helpers import funcion_id, login
-from .test_sprint2 import crear_tarea, esc  # noqa: F401  (esc es el escenario del Sprint 2)
+from .test_sprint2 import bloquear, crear_tarea, esc  # noqa: F401  (esc es el escenario del Sprint 2)
+from .test_sprint4 import PDF, adjuntar
 
 
 def desactivar(e, uid, h=None):
@@ -189,3 +198,115 @@ def test_restablecer_quita_el_freno_de_intentos_fallidos(esc):
     assert entrar(esc, "beto", "clave123").status_code == 429
     temporal = restablecer(esc, esc.beto_id).json()["password_temporal"]
     assert entrar(esc, "beto", temporal).status_code == 200
+
+
+# HU-08-004 Respaldo periódico
+def respaldar(e, h=None):
+    r = e.c.post("/api/respaldos", headers=h or e.adm)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def carpeta_respaldos():
+    return Path(os.environ["RESPALDOS_DIR"])
+
+
+def con_bd(fn):
+    from app.db.database import get_engine
+    with get_engine().connect() as db:
+        return fn(db)
+
+
+@pytest.fixture()
+def datos(esc):
+    """Proyecto con tarea asignada, avance, bloqueo, comentario, adjunto, aviso e historial."""
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    url = f"/api/tareas/{t['id']}"
+    esc.c.put(f"{url}/estado", headers=esc.beto, json={"estado": "en_curso"})
+    esc.c.post(f"{url}/avances", headers=esc.beto, json={"texto": "Portada lista"})
+    bloquear(esc, t)
+    esc.c.post(f"/api/proyectos/{esc.pid}/comentarios", headers=esc.beto, json={"texto": "Revisen"})
+    adjuntar(esc, f"/api/proyectos/{esc.pid}", esc.beto)
+    assert esc.c.put(f"/api/proyectos/{esc.pid}/estado", headers=esc.ana,
+                     json={"estado": "en_curso"}).status_code == 200
+    desactivar(esc, esc.carla_id)
+    esc.tarea = t
+    return esc
+
+
+def test_el_respaldo_incluye_toda_la_informacion_y_es_legible(datos):
+    r = respaldar(datos)
+    assert (r["resultado"], r["origen"], r["actor_nombre"]) == ("ok", "manual", "Administrador")
+    assert r["detalle"] == "1 proyectos, 1 tareas, 1 adjuntos" and r["tamano"] > 0
+    ruta = carpeta_respaldos() / r["archivo"]
+    assert "/" not in r["archivo"] and ruta.is_file()  # al Admin no se le muestra la ruta del servidor
+    with zipfile.ZipFile(ruta) as z:
+        assert z.testzip() is None
+        z.extractall(carpeta_respaldos() / "leido")
+    from app.modules.respaldos.service import leer_manifiesto
+    filas = leer_manifiesto(ruta)["filas"]
+    for tabla in ("usuarios", "funciones", "participantes", "eventos_cuenta", "proyectos", "historial_proyectos",
+                  "tareas", "historial_tareas", "avances", "bloqueos", "comentarios", "archivos", "avisos"):
+        assert filas[tabla] > 0, tabla
+    bd = sqlite3.connect(carpeta_respaldos() / "leido" / "gestion.db")
+    assert bd.execute("SELECT nombre FROM proyectos").fetchall() == [("Web",)]
+    assert bd.execute("SELECT activo FROM usuarios WHERE usuario = 'carla'").fetchone() == (0,)
+    [(interno,)] = bd.execute("SELECT almacen FROM archivos").fetchall()
+    bd.close()
+    assert (carpeta_respaldos() / "leido" / "archivos" / interno).read_bytes() == PDF
+    if os.name == "posix":  # solo el usuario del servicio puede leerlos
+        assert ruta.stat().st_mode & 0o077 == 0 and carpeta_respaldos().stat().st_mode & 0o077 == 0
+
+
+def test_se_respalda_segun_la_frecuencia(datos, monkeypatch):
+    from app.modules.respaldos import service
+    monkeypatch.setenv("RESPALDO_CADA_HORAS", "24")
+    assert con_bd(service.toca_respaldo)  # sin ningún respaldo válido
+    primero = con_bd(service.respaldar_si_toca)
+    assert (primero["resultado"], primero["origen"]) == ("ok", "programado")
+    assert con_bd(service.respaldar_si_toca) is None  # aún no toca
+    hecho = datetime.fromisoformat(primero["terminado_en"])
+    assert not con_bd(lambda db: service.toca_respaldo(db, hecho + timedelta(hours=23)))
+    assert con_bd(lambda db: service.toca_respaldo(db, hecho + timedelta(hours=24)))
+    estado = datos.c.get("/api/respaldos", headers=datos.adm).json()
+    assert (estado["frecuencia_horas"], estado["atrasado"], estado["ultimo_valido"]["id"]) == (24, False, primero["id"])
+    # si el archivo del último desaparece, deja de contar y vuelve a tocar
+    (carpeta_respaldos() / primero["archivo"]).unlink()
+    assert con_bd(service.toca_respaldo)
+
+
+def test_un_respaldo_fallido_queda_senalado_y_no_cuenta(datos, monkeypatch):
+    from app.modules.respaldos import service
+    bueno = respaldar(datos)
+
+    def falla(_):
+        raise ValueError("La BD del respaldo no pasa la revisión de integridad")
+    monkeypatch.setattr(service, "verificar", falla)
+    r = respaldar(datos)
+    assert (r["resultado"], r["archivo"]) == ("fallido", None)
+    assert "integridad" in r["detalle"]
+    assert sorted(p.name for p in carpeta_respaldos().iterdir()) == [bueno["archivo"]]  # ni .parcial
+    estado = datos.c.get("/api/respaldos", headers=datos.adm).json()
+    assert estado["ultimo_fallido"] is True and estado["ultimo_valido"]["id"] == bueno["id"]
+    assert [x["resultado"] for x in estado["respaldos"]] == ["fallido", "ok"]
+    # tampoco si la carpeta de respaldos no se puede usar
+    monkeypatch.setenv("RESPALDOS_DIR", str(carpeta_respaldos() / bueno["archivo"]))
+    assert respaldar(datos)["resultado"] == "fallido"
+
+
+def test_conserva_solo_los_mas_recientes(datos, monkeypatch):
+    monkeypatch.setenv("RESPALDOS_CONSERVAR", "2")
+    hechos = [respaldar(datos)["archivo"] for _ in range(3)]
+    assert sorted(p.name for p in carpeta_respaldos().iterdir()) == sorted(hechos[1:])
+    estado = datos.c.get("/api/respaldos", headers=datos.adm).json()
+    assert len(estado["respaldos"]) == 3  # el registro de ejecuciones se conserva
+
+
+def test_solo_admin_consulta_o_pide_respaldos(datos):
+    archivo = respaldar(datos)["archivo"]
+    for h in (datos.ana, datos.beto):
+        assert datos.c.get("/api/respaldos", headers=h).status_code == 403
+        assert datos.c.post("/api/respaldos", headers=h).status_code == 403
+    assert datos.c.get("/api/respaldos").status_code == 401
+    for ruta in (f"/{archivo}", f"/data/respaldos/{archivo}", f"/respaldos/{archivo}"):
+        assert datos.c.get(ruta).status_code == 404  # nunca se sirven por HTTP

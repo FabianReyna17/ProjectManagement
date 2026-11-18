@@ -11,6 +11,7 @@ const ATAJOS = [
   [["g", "e"], "Ir a Estado general (Admin, Responsable y Supervisor)"],
   [["g", "c"], "Ir a Carga por responsable (Admin, Responsable y Supervisor)"],
   [["g", "u"], "Ir a Usuarios (solo Admin)"],
+  [["g", "r"], "Ir a Respaldos (solo Admin)"],
   [["n"], "Nueva tarea (en un proyecto que gestionas) o nuevo proyecto (en la lista)"],
   [["/"], "Buscar en la lista de la vista"],
   [[TECLA_MOD, "Enter"], "Enviar el formulario"],
@@ -34,7 +35,7 @@ function mostrarAtajos() {
 
 ACCIONES.atajos = () => mostrarAtajos();
 
-const IR_A = { p: "#/proyectos", t: "#/mis-tareas", a: "#/avisos", e: "#/estado-proyectos", c: "#/carga", u: "#/usuarios" };
+const IR_A = { p: "#/proyectos", t: "#/mis-tareas", a: "#/avisos", e: "#/estado-proyectos", c: "#/carga", u: "#/usuarios", r: "#/respaldos" };
 let prefijoG = 0;
 
 document.addEventListener("keydown", (e) => {
@@ -51,7 +52,7 @@ document.addEventListener("keydown", (e) => {
   if (prefijoG && Date.now() - prefijoG < 1500) {
     prefijoG = 0;
     const destino = IR_A[tecla.toLowerCase()];
-    const permitido = { "#/usuarios": API.usuario()?.funcion === "Admin", "#/estado-proyectos": puedeSupervisar(), "#/carga": puedeSupervisar() }[destino] ?? true;
+    const permitido = { "#/usuarios": API.usuario()?.funcion === "Admin", "#/respaldos": API.usuario()?.funcion === "Admin", "#/estado-proyectos": puedeSupervisar(), "#/carga": puedeSupervisar() }[destino] ?? true;
     if (destino && permitido) {
       e.preventDefault();
       location.hash = destino;
@@ -119,7 +120,10 @@ const Paleta = {
       cmds.push({ texto: "Ir a Estado general", atajo: "g e", ir: "#/estado-proyectos" },
                 { texto: "Ir a Carga por responsable", atajo: "g c", ir: "#/carga" });
     }
-    if (u.funcion === "Admin") cmds.push({ texto: "Ir a Usuarios", atajo: "g u", ir: "#/usuarios" });
+    if (u.funcion === "Admin") {
+      cmds.push({ texto: "Ir a Usuarios", atajo: "g u", ir: "#/usuarios" },
+                { texto: "Ir a Respaldos", atajo: "g r", ir: "#/respaldos" });
+    }
     if (VistaActual.nueva) cmds.push({ texto: VistaActual.textoNueva, atajo: "n", ir: VistaActual.nueva });
     if (["Admin", "Responsable"].includes(u.funcion) && VistaActual.nueva !== "#/proyectos/nuevo") {
       cmds.push({ texto: "Nuevo proyecto", ir: "#/proyectos/nuevo" });

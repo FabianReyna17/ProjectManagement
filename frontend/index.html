@@ -23,6 +23,7 @@
       <symbol id="i-lista" viewBox="0 0 24 24"><path d="M8.5 6.5h11M8.5 12h11M8.5 17.5h11M4.5 6.5h.01M4.5 12h.01M4.5 17.5h.01"/></symbol>
       <symbol id="i-tablero" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="5" height="15" rx="1.5"/><rect x="10.5" y="4.5" width="4" height="10" rx="1.5"/><rect x="16.5" y="4.5" width="4" height="12.5" rx="1.5"/></symbol>
       <symbol id="i-estado" viewBox="0 0 24 24"><path d="M3.5 12h4l2.5-6 4 12 2.5-6h4"/></symbol>
+      <symbol id="i-respaldo" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7.5" ry="2.5"/><path d="M4.5 6v6c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5V6M4.5 12v6c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-6"/></symbol>
       <symbol id="i-usuarios" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 19.5c.8-3.2 3.3-5 6.5-5s5.7 1.8 6.5 5M15.5 5.2a3.5 3.5 0 0 1 0 6.6M17.5 14.8c2 .6 3.4 2.2 4 4.7"/></symbol>
       <symbol id="i-buscar" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></symbol>
       <symbol id="i-mas" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -68,6 +69,7 @@
         <a href="#/estado-proyectos" data-seccion="estado" data-supervision hidden><svg class="icono" aria-hidden="true"><use href="#i-estado"/></svg>Estado general</a>
         <a href="#/carga" data-seccion="carga" data-supervision hidden><svg class="icono" aria-hidden="true"><use href="#i-usuarios"/></svg>Carga por responsable</a>
         <a href="#/usuarios" data-seccion="usuarios" data-solo-admin hidden><svg class="icono" aria-hidden="true"><use href="#i-usuarios"/></svg>Usuarios</a>
+        <a href="#/respaldos" data-seccion="respaldos" data-solo-admin hidden><svg class="icono" aria-hidden="true"><use href="#i-respaldo"/></svg>Respaldos</a>
       </nav>
       <section class="recientes" aria-labelledby="titulo-recientes">
         <h2 id="titulo-recientes" class="lateral-titulo">Proyectos recientes</h2>
@@ -138,6 +140,7 @@
   <script src="js/tareas.js"></script>
   <script src="js/avisos.js"></script>
   <script src="js/supervision.js"></script>
+  <script src="js/respaldos.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

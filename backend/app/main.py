@@ -14,6 +14,8 @@ from .modules.acceso.router import router as acceso_router
 from .modules.avisos.router import router as avisos_router
 from .modules.colaboracion.router import router as colaboracion_router
 from .modules.proyectos.router import router as proyectos_router
+from .modules.respaldos import service as respaldos
+from .modules.respaldos.router import router as respaldos_router
 from .modules.tareas.router import router as tareas_router
 
 FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend"))
@@ -23,9 +25,13 @@ FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 async def lifespan(app: FastAPI):
     init_db()
     minutos = programado.intervalo_minutos()
-    ciclo = asyncio.create_task(programado.ciclo(minutos)) if minutos > 0 else None  # HU-06-002
+    ciclos = []
+    if minutos > 0:
+        ciclos.append(asyncio.create_task(programado.ciclo(minutos)))  # HU-06-002
+    if respaldos.frecuencia_horas() > 0:
+        ciclos.append(asyncio.create_task(programado.ciclo_respaldos(respaldos.frecuencia_horas())))  # HU-08-004
     yield
-    if ciclo:
+    for ciclo in ciclos:
         ciclo.cancel()
 
 
@@ -74,6 +80,7 @@ app.include_router(proyectos_router)
 app.include_router(tareas_router)
 app.include_router(avisos_router)
 app.include_router(colaboracion_router)
+app.include_router(respaldos_router)
 
 # Frontend estático (se monta al final para no tapar /api)
 if os.path.isdir(FRONTEND_DIR):

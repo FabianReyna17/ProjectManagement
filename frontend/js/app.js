@@ -19,6 +19,7 @@ const rutas = [
   { patron: /^#\/estado-proyectos$/, vista: vistaEstadoProyectos, esqueleto: "tabla" },
   { patron: /^#\/carga(?:\?proyecto=(\d+))?$/, vista: vistaCarga, esqueleto: "tabla" },
   { patron: /^#\/usuarios$/, vista: vistaUsuarios, esqueleto: "tabla" },
+  { patron: /^#\/respaldos$/, vista: vistaRespaldos, esqueleto: "tabla" },
   { patron: /^#\/sin-acceso$/, vista: vistaSinAcceso },
   { patron: /^#\/cambiar-contrasena$/, vista: vistaCambiarContrasena, aislada: true, esqueleto: "form" },
 ];
@@ -848,6 +849,9 @@ async function vistaUsuarios() {
         <div>
           <h1 tabindex="-1">Usuarios</h1>
           <p class="subtitulo" data-conteo="tabla-usuarios" data-total="${total}">${total}</p>
+        </div>
+        <div class="encabezado-acciones">
+          <a class="boton secundario" href="#/respaldos">${icono("respaldo")}Respaldos</a>
         </div>
       </header>
       <div class="dos-columnas">

@@ -254,3 +254,71 @@ def test_avisos_nuevos_llegan_sin_leer(esc4):
     esc4.c.post("/api/avisos/leer-todos", headers=esc4.beto)
     crear_tarea(esc4, "Maquetar", responsable_id=esc4.beto_id)
     assert [a["leido"] for a in avisos(esc4, esc4.beto)] == [False, True]
+
+
+# HU-05-001 Comentar proyecto o tarea
+def comentar(e, url, h, texto, clave=None):
+    cab = {**h, "Idempotency-Key": clave} if clave else h
+    return e.c.post(f"{url}/comentarios", headers=cab, json={"texto": texto})
+
+
+def comentarios(e, url, h):
+    r = e.c.get(f"{url}/comentarios", headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_comentar_tarea_y_proyecto(esc):
+    t = crear_tarea(esc)
+    tarea, proyecto = f"/api/tareas/{t['id']}", f"/api/proyectos/{esc.pid}"
+    r = comentar(esc, tarea, esc.beto, "¿Usamos la paleta nueva?")
+    assert r.status_code == 201, r.text
+    c = r.json()
+    assert (c["texto"], c["autor_nombre"], c["tarea_id"], c["proyecto_id"]) == ("¿Usamos la paleta nueva?", "Beto", t["id"], esc.pid)
+    assert c["creado_en"]
+    assert comentar(esc, proyecto, esc.ana, "Reunión el lunes").status_code == 201
+
+    assert [x["texto"] for x in comentarios(esc, tarea, esc.ana)] == ["¿Usamos la paleta nueva?"]
+    assert [x["texto"] for x in comentarios(esc, proyecto, esc.beto)] == ["Reunión el lunes"]  # no mezcla los de la tarea
+
+
+def test_comentarios_en_orden_y_autor_tras_reasignar(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    tarea = f"/api/tareas/{t['id']}"
+    comentar(esc, tarea, esc.beto, "Primero")
+    comentar(esc, tarea, esc.ana, "Segundo")
+    comentar(esc, tarea, esc.beto, "Tercero")
+    esc.c.put(f"{tarea}/responsable", headers=esc.ana, json={"usuario_id": esc.ana_id})
+    assert [(x["texto"], x["autor_nombre"]) for x in comentarios(esc, tarea, esc.ana)] == [
+        ("Primero", "Beto"), ("Segundo", "Ana"), ("Tercero", "Beto")]
+
+
+def test_comentario_vacio_se_rechaza(esc):
+    t = crear_tarea(esc)
+    for texto in ("", "   "):
+        assert comentar(esc, f"/api/tareas/{t['id']}", esc.ana, texto).status_code == 400
+        assert comentar(esc, f"/api/proyectos/{esc.pid}", esc.ana, texto).status_code == 400
+    assert comentarios(esc, f"/api/tareas/{t['id']}", esc.ana) == []
+
+
+def test_sin_acceso_no_lee_ni_comenta(esc):
+    t = crear_tarea(esc)
+    tarea, proyecto = f"/api/tareas/{t['id']}", f"/api/proyectos/{esc.pid}"
+    comentar(esc, tarea, esc.ana, "Interno")
+    for url in (tarea, proyecto):
+        assert esc.c.get(f"{url}/comentarios", headers=esc.carla).status_code == 403
+        assert comentar(esc, url, esc.carla, "Hola").status_code == 403
+        assert esc.c.get(f"{url}/comentarios", headers=esc.adm).status_code == 403  # la función no da acceso
+    assert esc.c.get("/api/tareas/9999/comentarios", headers=esc.ana).status_code == 403
+
+    esc.c.delete(f"/api/proyectos/{esc.pid}/participantes/{esc.beto_id}", headers=esc.ana)
+    assert esc.c.get(f"{tarea}/comentarios", headers=esc.beto).status_code == 403  # perdió el acceso
+    assert comentar(esc, tarea, esc.beto, "¿Sigo?").status_code == 403
+    assert len(comentarios(esc, tarea, esc.ana)) == 1
+
+
+def test_reintentar_comentario_no_lo_duplica(esc):
+    url = f"/api/proyectos/{esc.pid}"
+    a = comentar(esc, url, esc.beto, "Listo el acta", clave="com-1").json()
+    b = comentar(esc, url, esc.beto, "Listo el acta", clave="com-1").json()
+    assert a["id"] == b["id"] and len(comentarios(esc, url, esc.ana)) == 1

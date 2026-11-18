@@ -40,13 +40,13 @@ backend/
 │   ├── main.py        # crea la app, traduce errores a HTTP y sirve el frontend
 │   ├── core/          # errores, seguridad, freno de intentos, cabeceras
 │   ├── db/            # conexión, transacciones, migraciones e idempotencia
-│   └── modules/       # acceso, proyectos, tareas y avisos: router → service → repository
+│   └── modules/       # acceso, proyectos, tareas, avisos y colaboración: router → service → repository
 ├── migrations/        # Alembic
 └── tests/
 frontend/
 ├── index.html
 ├── css/               # tokens, base, layout, componentes y vistas
-└── js/                # tema, api, ui, componentes, atajos, tareas, avisos y app (scripts clásicos, en ese orden)
+└── js/                # tema, api, ui, componentes, atajos, colaboración, tareas, avisos y app (scripts clásicos, en ese orden)
 ```
 
 En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación de eventos), lo que permite la CSP estricta del backend.
@@ -87,6 +87,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 4 | HU-06-001 | Al asignar una tarea (al crearla, asignarla o replanificarla) la nueva persona responsable recibe un aviso con tarea, proyecto, quién la asignó y fecha, en la misma transacción que la asignación: si esta falla no queda aviso y un reintento no lo duplica (un aviso por evento del historial). Quien se asigna a sí mismo no recibe aviso. Vista "Avisos" (`g a`) — `GET /api/avisos` |
 | 4 | HU-06-003 | Al registrar un bloqueo, el responsable del proyecto recibe un aviso con la tarea y el motivo, en la misma transacción; un reintento no lo repite y quien reporta su propio bloqueo no se avisa a sí mismo. Al resolverse, el aviso se conserva marcado "Resuelto" |
 | 4 | HU-06-005 | Bandeja "Avisos" en orden, con los no leídos resaltados y un contador en la navegación; abrir un aviso lo marca como leído y lleva a su tarea; "Marcar todos como leídos". Si se retiró el acceso al proyecto, el aviso se conserva sin datos de la tarea ni del proyecto y abrirlo muestra "Sin acceso" — `GET /api/avisos`, `GET /api/avisos/resumen`, `POST /api/avisos/{id}/abrir`, `POST /api/avisos/leer-todos` |
+| 4 | HU-05-001 | Comentarios en el proyecto y en cada tarea, con autor y fecha, en orden de publicación; cualquier participante comenta, un comentario vacío se rechaza y reasignar la tarea no cambia su autoría. Sin acceso vigente no se leen ni se publican, ni con enlace directo — `POST/GET /api/proyectos/{id}/comentarios`, `POST/GET /api/tareas/{id}/comentarios` |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 

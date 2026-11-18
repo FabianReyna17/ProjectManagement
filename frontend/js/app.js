@@ -435,9 +435,10 @@ async function vistaProyecto(id) {
   const modo = vistaTareasElegida();
   const filtros = filtrosTareas(id);
   const hayFiltros = Object.keys(filtros).length > 0;
-  const [participantes, datosTareas, usuarios, cambios] = await Promise.all([
+  const [participantes, datosTareas, usuarios, cambios, comentarios] = await Promise.all([
     API.get(`/api/proyectos/${id}/participantes`), API.get(`/api/proyectos/${id}/${modo}${consultaFiltros(filtros)}`),
     p.soy_responsable ? API.get("/api/usuarios") : [], API.get(`/api/proyectos/${id}/historial`),
+    API.get(`/api/proyectos/${id}/comentarios`),
   ]);
   const tareas = modo === "tablero" ? datosTareas.columnas.flatMap((c) => c.tareas) : datosTareas;
   const ids = new Set(participantes.map((x) => x.id));
@@ -521,6 +522,8 @@ async function vistaProyecto(id) {
           </form>` : `<p class="tenue">Todas las cuentas activas ya participan.</p>`) : ""}
       </section>
 
+      ${seccionComentarios(comentarios, "el proyecto")}
+
       ${cambios.length ? `
       <section class="bloque" aria-labelledby="titulo-cambios">
         <h2 class="titulo-seccion" id="titulo-cambios">Cambios del plan <span class="conteo">${cambios.length}</span></h2>
@@ -528,6 +531,8 @@ async function vistaProyecto(id) {
       </section>` : ""}`,
 
     montar() {
+      montarComentarios(`/api/proyectos/${id}/comentarios`);  // HU-05-001
+
       // HU-07-002: cada cambio de filtro vuelve a consultar al servidor
       const fFiltros = document.getElementById("f-filtros");
       fFiltros?.addEventListener("change", () => {

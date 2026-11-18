@@ -97,6 +97,10 @@
 .form-avance { margin-top: var(--e-3); }
 .pista-campo { color: var(--texto-2); font-size: var(--t-sm); }
 
+/* ---------- Comentarios (HU-05-001) ---------- */
+
+.comentario-autor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--e-2); }
+
 /* ---------- Avisos (HU-06-005) ---------- */
 
 .lista-avisos > li.no-leido { background: var(--acento-suave); }

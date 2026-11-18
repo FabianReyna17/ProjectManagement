@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-02-005, HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001 a HU-06-003, HU-07-001 a HU-07-003, HU-07-005, HU-08-002, HU-08-003).
+"""Reglas de tareas (HU-02-005, HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001 a HU-06-003, HU-07-001 a HU-07-005, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -236,6 +236,34 @@ def estado_general(db, usuario_id: int, incluir_cerrados: bool = False) -> dict:
     totales = {"proyectos": len(filas), "requieren_atencion": sum(f["requiere_atencion"] for f in filas),
                **{k: sum(f["indicadores"][k]["total"] for f in filas) for k in INDICADORES_ATENCION}}
     return {"proyectos": filas, "totales": totales}
+
+
+def _cifras(grupo: dict) -> dict:
+    tareas = grupo["tareas"]
+    return {**grupo, "abiertas": len(tareas), "vencidas": sum(t["vencimiento"] == "vencida" for t in tareas),
+            "bloqueadas": sum(t["bloqueada"] for t in tareas)}
+
+
+def carga(db, usuario_id: int, proyecto_id: Optional[int] = None) -> dict:
+    """HU-07-004: tareas abiertas, vencidas y bloqueadas por persona en los proyectos activos en
+    los que participa quien consulta (o solo en `proyecto_id`, si lo tiene autorizado). Se calcula
+    sobre la misma lista que ven el proyecto y el tablero; otras tareas ni se cuentan ni se ven.
+    Las tareas sin responsable van aparte para que no queden ocultas."""
+    activos = [p for p in proyectos.mis_proyectos(db, usuario_id) if p["estado"] != "cerrado"]
+    consultados = [proyectos.obtener_autorizado(db, proyecto_id, usuario_id)] if proyecto_id else activos
+    grupos = {None: {"usuario_id": None, "nombre": None, "tareas": []}}
+    for p in consultados:
+        for t in listar_de_proyecto(db, p):
+            if t["estado"] == "terminada":
+                continue
+            grupo = grupos.setdefault(t["responsable_id"], {"usuario_id": t["responsable_id"],
+                                                            "nombre": t["responsable_nombre"], "tareas": []})
+            grupo["tareas"].append({**t, "proyecto_nombre": p["nombre"]})
+    sin_asignar = _cifras(grupos.pop(None))
+    personas = sorted((_cifras(g) for g in grupos.values()),
+                      key=lambda g: (-g["abiertas"], -g["vencidas"], -g["bloqueadas"], g["nombre"]))
+    return {"personas": personas, "sin_asignar": sin_asignar,
+            "proyectos": [{"id": p["id"], "nombre": p["nombre"]} for p in activos]}
 
 
 def mis_tareas(db, usuario_id: int) -> list:

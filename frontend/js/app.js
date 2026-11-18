@@ -16,6 +16,7 @@ const rutas = [
   { patron: /^#\/avisos$/, vista: vistaAvisos, esqueleto: "tabla" },
   { patron: /^#\/avisos\/(\d+)$/, vista: vistaAbrirAviso, esqueleto: "ficha" },
   { patron: /^#\/estado-proyectos$/, vista: vistaEstadoProyectos, esqueleto: "tabla" },
+  { patron: /^#\/carga(?:\?proyecto=(\d+))?$/, vista: vistaCarga, esqueleto: "tabla" },
   { patron: /^#\/usuarios$/, vista: vistaUsuarios, esqueleto: "tabla" },
   { patron: /^#\/sin-acceso$/, vista: vistaSinAcceso },
 ];

@@ -67,6 +67,12 @@ def estado_de_los_proyectos(incluir_cerrados: bool = False,
     return service.estado_general(db, u["id"], incluir_cerrados)
 
 
+@router.get("/carga")
+def carga_por_responsable(proyecto_id: Optional[int] = None,
+                          u: dict = Depends(requiere_funcion(*service.FUNCIONES_SUPERVISAN)), db=Depends(get_db)):
+    return service.carga(db, u["id"], proyecto_id)
+
+
 @router.get("/mis-tareas")
 def mis_tareas(u: dict = Depends(usuario_actual), db=Depends(get_db)):
     return service.mis_tareas(db, u["id"])

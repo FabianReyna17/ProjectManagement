@@ -42,6 +42,7 @@ async function vistaEstadoProyectos() {
         <div class="encabezado-acciones">
           ${proyectos.length ? buscadorTabla("tabla-estado", "Buscar proyecto") : ""}
           <label class="casilla"><input type="checkbox" data-accion="incluir-cerrados" ${cerrados ? "checked" : ""}>Incluir cerrados</label>
+          <a class="boton secundario" href="#/carga">${icono("usuarios")}Carga por responsable</a>
         </div>
       </header>
       ${proyectos.length ? `
@@ -87,3 +88,73 @@ ACCIONES["abrir-cifra"] = (btn) => {
   almacen.guardar("vista-tareas", "tareas");
   location.hash = `#/proyectos/${Number(btn.dataset.proyecto)}`;
 };
+
+// ---------- HU-07-004 Carga por responsable ----------
+
+function cifraCarga(n, texto, clase = "") {
+  return `<span class="carga-cifra ${n && clase ? clase : ""}"><span class="num">${n}</span> ${texto}</span>`;
+}
+
+/** Una persona (o "Sin asignar"): cifras en el resumen y, al abrirla, sus tareas con su proyecto. */
+function grupoCarga(g, maximo, { sinAsignar = false } = {}) {
+  const ancho = maximo ? Math.round((g.abiertas / maximo) * 100) : 0;
+  return `
+    <details class="carga-persona${sinAsignar ? " carga-sin-asignar" : ""}">
+      <summary>
+        <span class="carga-quien">${sinAsignar ? etiquetaSinAsignar() : persona(g.nombre)}</span>
+        <span class="carga-barra" aria-hidden="true"><span data-ancho="${ancho}"></span></span>
+        <span class="carga-cifras">
+          ${cifraCarga(g.abiertas, g.abiertas === 1 ? "abierta" : "abiertas")}
+          ${cifraCarga(g.vencidas, g.vencidas === 1 ? "vencida" : "vencidas", "con-vencidas")}
+          ${cifraCarga(g.bloqueadas, g.bloqueadas === 1 ? "bloqueada" : "bloqueadas", "con-bloqueadas")}
+        </span>
+      </summary>
+      ${tablaTareas(g.tareas, { id: `carga-${g.usuario_id ?? "sin"}`, conProyecto: true })}
+    </details>`;
+}
+
+function etiquetaSinAsignar() {
+  return `<span class="persona">${icono("aviso")}<span>Sin asignar</span></span>`;
+}
+
+async function vistaCarga(proyectoId) {
+  if (!puedeSupervisar()) throw sinAcceso();
+  const r = await API.get(`/api/carga${proyectoId ? `?proyecto_id=${Number(proyectoId)}` : ""}`);
+  const maximo = Math.max(0, ...r.personas.map((p) => p.abiertas), r.sin_asignar.abiertas);
+  const elegido = r.proyectos.find((p) => p.id === Number(proyectoId));
+  const total = r.personas.reduce((n, p) => n + p.abiertas, 0) + r.sin_asignar.abiertas;
+  return {
+    titulo: "Carga por responsable",
+    seccion: "carga",
+    html: `
+      <header class="encabezado">
+        <div>
+          <h1 tabindex="-1">Carga por responsable</h1>
+          <p class="subtitulo">${total} tarea${total === 1 ? "" : "s"} abierta${total === 1 ? "" : "s"} ·
+            ${elegido ? escapar(elegido.nombre) : "todos tus proyectos activos"}</p>
+        </div>
+        <div class="encabezado-acciones">
+          <label class="filtro-proyecto">Proyecto
+            <select data-accion-cambio="carga-proyecto">
+              <option value="">Todos</option>
+              ${r.proyectos.map((p) => `<option value="${Number(p.id)}" ${p.id === Number(proyectoId) ? "selected" : ""}>${escapar(p.nombre)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+      </header>
+      ${total ? `
+        <p class="nota-estado tenue">Tareas abiertas de cada persona; ábrela para ver cuáles son. Solo se cuentan los proyectos a los que tienes acceso.</p>
+        <div class="lista-carga">
+          ${r.personas.map((g) => grupoCarga(g, maximo)).join("")}
+          ${r.sin_asignar.abiertas ? grupoCarga(r.sin_asignar, maximo, { sinAsignar: true }) : ""}
+        </div>`
+      : vacio("No hay tareas abiertas", elegido ? "Todas las tareas de este proyecto están terminadas." : "Tus proyectos activos no tienen tareas pendientes.")}`,
+    montar(app) {
+      // La CSP no permite estilos en línea: el ancho de cada barra se aplica desde aquí
+      app.querySelectorAll(".carga-barra [data-ancho]").forEach((el) => el.style.setProperty("--ancho", `${el.dataset.ancho}%`));
+      app.querySelector("[data-accion-cambio=carga-proyecto]")?.addEventListener("change", (e) => {
+        location.hash = e.target.value ? `#/carga?proyecto=${Number(e.target.value)}` : "#/carga";
+      });
+    },
+  };
+}

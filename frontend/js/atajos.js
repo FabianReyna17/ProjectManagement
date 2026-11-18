@@ -9,6 +9,7 @@ const ATAJOS = [
   [["g", "t"], "Ir a Mis tareas"],
   [["g", "a"], "Ir a Avisos"],
   [["g", "e"], "Ir a Estado general (Admin, Responsable y Supervisor)"],
+  [["g", "c"], "Ir a Carga por responsable (Admin, Responsable y Supervisor)"],
   [["g", "u"], "Ir a Usuarios (solo Admin)"],
   [["n"], "Nueva tarea (en un proyecto que gestionas) o nuevo proyecto (en la lista)"],
   [["/"], "Buscar en la lista de la vista"],
@@ -33,7 +34,7 @@ function mostrarAtajos() {
 
 ACCIONES.atajos = () => mostrarAtajos();
 
-const IR_A = { p: "#/proyectos", t: "#/mis-tareas", a: "#/avisos", e: "#/estado-proyectos", u: "#/usuarios" };
+const IR_A = { p: "#/proyectos", t: "#/mis-tareas", a: "#/avisos", e: "#/estado-proyectos", c: "#/carga", u: "#/usuarios" };
 let prefijoG = 0;
 
 document.addEventListener("keydown", (e) => {
@@ -50,7 +51,7 @@ document.addEventListener("keydown", (e) => {
   if (prefijoG && Date.now() - prefijoG < 1500) {
     prefijoG = 0;
     const destino = IR_A[tecla.toLowerCase()];
-    const permitido = { "#/usuarios": API.usuario()?.funcion === "Admin", "#/estado-proyectos": puedeSupervisar() }[destino] ?? true;
+    const permitido = { "#/usuarios": API.usuario()?.funcion === "Admin", "#/estado-proyectos": puedeSupervisar(), "#/carga": puedeSupervisar() }[destino] ?? true;
     if (destino && permitido) {
       e.preventDefault();
       location.hash = destino;
@@ -114,7 +115,10 @@ const Paleta = {
       { texto: "Ir a Mis tareas", atajo: "g t", ir: "#/mis-tareas" },
       { texto: "Ir a Avisos", atajo: "g a", ir: "#/avisos" },
     ];
-    if (puedeSupervisar()) cmds.push({ texto: "Ir a Estado general", atajo: "g e", ir: "#/estado-proyectos" });
+    if (puedeSupervisar()) {
+      cmds.push({ texto: "Ir a Estado general", atajo: "g e", ir: "#/estado-proyectos" },
+                { texto: "Ir a Carga por responsable", atajo: "g c", ir: "#/carga" });
+    }
     if (u.funcion === "Admin") cmds.push({ texto: "Ir a Usuarios", atajo: "g u", ir: "#/usuarios" });
     if (VistaActual.nueva) cmds.push({ texto: VistaActual.textoNueva, atajo: "n", ir: VistaActual.nueva });
     if (["Admin", "Responsable"].includes(u.funcion) && VistaActual.nueva !== "#/proyectos/nuevo") {

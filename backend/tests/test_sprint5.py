@@ -280,3 +280,72 @@ def test_proyecto_cerrado_solo_se_consulta(esc):
     assert esc.c.get("/api/mis-tareas", headers=esc.beto).json() == []  # ya no es trabajo pendiente
     # el acceso se sigue administrando (p. ej. dar acceso a quien debe consultarlo)
     assert esc.c.post(f"{url_p}/participantes", headers=esc.ana, json={"usuario_id": esc.carla_id}).status_code == 201
+
+
+# HU-07-004 Carga por responsable
+def carga(e, h, **params):
+    r = e.c.get("/api/carga", headers=h, params=params)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def resumen_carga(r):
+    return ({p["nombre"]: (p["abiertas"], p["vencidas"], p["bloqueadas"]) for p in r["personas"]},
+            (r["sin_asignar"]["abiertas"], r["sin_asignar"]["vencidas"], r["sin_asignar"]["bloqueadas"]))
+
+
+@pytest.fixture()
+def con_carga(sup):
+    """Además del escenario `sup`: ana tiene una tarea en App y beto otra en Interno (donde sofia no participa)."""
+    c = sup.c
+    c.post(f"/api/proyectos/{sup.proyectos['App']}/tareas", headers=sup.ana,
+           json={"nombre": "Revisión", "descripcion": "D", "responsable_id": sup.ana_id})
+    interno = sup.proyectos["Interno"]
+    assert c.post(f"/api/proyectos/{interno}/participantes", headers=sup.ana,
+                  json={"usuario_id": sup.beto_id}).status_code == 201
+    c.post(f"/api/proyectos/{interno}/tareas", headers=sup.ana,
+           json={"nombre": "Privada", "descripcion": "D", "responsable_id": sup.beto_id, "fecha_limite": en_dias(-3)})
+    return sup
+
+
+def test_carga_por_persona_y_sin_asignar_aparte(con_carga):
+    r = carga(con_carga, con_carga.sofia)
+    personas, sin_asignar = resumen_carga(r)
+    assert personas == {"Beto": (2, 1, 1), "Ana": (1, 0, 0)}  # la terminada no cuenta
+    assert [p["nombre"] for p in r["personas"]] == ["Beto", "Ana"]  # más cargado primero
+    assert sin_asignar == (3, 0, 0)
+    assert {t["nombre"] for t in r["sin_asignar"]["tareas"]} == {"Lejana", "Sin fecha", "Al día"}
+    beto = r["personas"][0]
+    assert {(t["nombre"], t["proyecto_nombre"]) for t in beto["tareas"]} == {("Vencida", "Web"), ("Bloqueada", "Web")}
+    assert {p["nombre"] for p in r["proyectos"]} == {"Web", "App"}
+
+
+def test_carga_solo_de_proyectos_autorizados(con_carga):
+    # ana participa en Interno: ve la tarea de beto ahí y la atrasada sin asignar
+    personas, sin_asignar = resumen_carga(carga(con_carga, con_carga.ana))
+    assert personas["Beto"] == (3, 2, 1) and sin_asignar == (4, 1, 0)
+    # sofia no: no se le suma ni se le muestra
+    r = carga(con_carga, con_carga.sofia)
+    assert "Privada" not in [t["nombre"] for p in r["personas"] for t in p["tareas"]]
+    assert con_carga.c.get("/api/carga", headers=con_carga.sofia,
+                           params={"proyecto_id": con_carga.proyectos["Interno"]}).status_code == 403
+    assert con_carga.c.get("/api/carga", headers=con_carga.beto).status_code == 403  # integrante
+
+
+def test_carga_de_un_proyecto_coincide_con_su_lista(con_carga):
+    e = con_carga
+    r = carga(e, e.sofia, proyecto_id=e.pid)
+    personas, sin_asignar = resumen_carga(r)
+    assert personas == {"Beto": (2, 1, 1)} and sin_asignar == (2, 0, 0)
+    for p in r["personas"]:
+        lista = lambda **f: e.c.get(f"/api/proyectos/{e.pid}/tareas", headers=e.sofia,
+                                    params={"responsable": p["usuario_id"], **f}).json()
+        assert len([t for t in lista() if t["estado"] != "terminada"]) == p["abiertas"]
+        assert len(lista(vencimiento="vencida")) == p["vencidas"]
+        assert len(lista(bloqueo="bloqueada")) == p["bloqueadas"]
+
+
+def test_carga_sin_proyectos_cerrados(con_carga):
+    assert cerrar(con_carga, justificacion="Se cancela").status_code == 200
+    personas, sin_asignar = resumen_carga(carga(con_carga, con_carga.sofia))
+    assert personas == {"Ana": (1, 0, 0)} and sin_asignar == (1, 0, 0)

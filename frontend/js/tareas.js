@@ -122,8 +122,11 @@ const INDICADORES = [
 function resumenProyecto(pid, r) {
   return `
     <section class="bloque" aria-labelledby="titulo-resumen">
-      <h2 class="titulo-seccion" id="titulo-resumen">Resumen
-        <span class="conteo">${r.abiertas} abierta${r.abiertas === 1 ? "" : "s"} de ${r.total}</span></h2>
+      <div class="encabezado-seccion">
+        <h2 class="titulo-seccion" id="titulo-resumen">Resumen
+          <span class="conteo">${r.abiertas} abierta${r.abiertas === 1 ? "" : "s"} de ${r.total}</span></h2>
+        ${puedeSupervisar() && r.abiertas ? `<a class="boton chico secundario" href="#/carga?proyecto=${Number(pid)}">${icono("usuarios")}Carga por responsable</a>` : ""}
+      </div>
       <ul class="indicadores">
         ${INDICADORES.map(([clave, texto, ico]) => {
           const ind = r.indicadores[clave];

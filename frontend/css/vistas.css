@@ -189,6 +189,37 @@
 .banda-cierre p { color: var(--texto-2); }
 .banda-cierre strong { color: var(--texto); font-weight: var(--peso-medio); }
 
+/* ---------- Carga por responsable (HU-07-004) ---------- */
+
+.filtro-proyecto { display: inline-flex; align-items: center; gap: var(--e-2); font-size: var(--t-sm); color: var(--texto-2); }
+.filtro-proyecto select { min-width: 180px; }
+.lista-carga { display: grid; gap: var(--e-2); }
+.carga-persona { border: 1px solid var(--borde); border-radius: var(--r-2); background: var(--superficie); }
+.carga-persona > summary {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.2fr) minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: var(--e-4);
+  padding: var(--e-3) var(--e-4);
+  cursor: pointer;
+  list-style: none;
+}
+.carga-persona > summary::-webkit-details-marker { display: none; }
+.carga-persona > summary:hover { background: var(--superficie-hover); }
+.carga-persona[open] > summary { border-bottom: 1px solid var(--borde); }
+.carga-persona .tabla-marco { border: 0; border-radius: 0; }
+.carga-sin-asignar .carga-quien { color: var(--aviso); }
+.carga-sin-asignar .carga-quien .icono { width: 16px; height: 16px; }
+.carga-barra { height: 6px; border-radius: 3px; background: var(--superficie-2); overflow: hidden; }
+.carga-barra > span { display: block; width: var(--ancho); height: 100%; border-radius: 3px; background: var(--acento); }
+.carga-cifras { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--e-3); color: var(--texto-2); font-size: var(--t-sm); white-space: nowrap; }
+.carga-cifra .num { color: var(--texto); font-weight: var(--peso-fuerte); }
+.carga-cifra.con-vencidas, .carga-cifra.con-vencidas .num, .carga-cifra.con-bloqueadas, .carga-cifra.con-bloqueadas .num { color: var(--peligro); }
+@media (max-width: 720px) {
+  .carga-persona > summary { grid-template-columns: 1fr; gap: var(--e-2); }
+  .carga-cifras { justify-content: flex-start; }
+}
+
 /* ---------- Estado general de los proyectos (HU-07-005) ---------- */
 
 .casilla { display: inline-flex; align-items: center; gap: var(--e-2); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }

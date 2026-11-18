@@ -86,6 +86,10 @@
 .chip-bloqueo .icono { width: 14px; height: 14px; vertical-align: 0; }
 
 /* HU-04-005 */
+.chip-desactivada { color: var(--texto-2); background: var(--superficie-2); }
+.chip-desactivada .icono { width: 14px; height: 14px; vertical-align: 0; }
+.fila-inactiva .celda-principal { color: var(--texto-2); }
+
 .chip-vencida { border-color: var(--peligro-borde); background: var(--peligro-suave); color: var(--peligro); }
 .chip-por_vencer { border-color: var(--aviso-borde); background: var(--aviso-suave); color: var(--aviso); }
 .chip-vencida .icono, .chip-por_vencer .icono { width: 14px; height: 14px; vertical-align: 0; }

@@ -55,6 +55,11 @@ function opcionesPrioridad(seleccionada = "media") {
     .map(([v, t]) => `<option value="${v}" ${v === seleccionada ? "selected" : ""}>${t}</option>`).join("");
 }
 
+// HU-01-009: la cuenta ya no entra, pero su nombre se conserva en lo que hizo
+function etiquetaCuentaDesactivada() {
+  return `<span class="chip chip-desactivada">${icono("bloqueo")}Cuenta desactivada</span>`;
+}
+
 function sinAsignar() {
   return `<span class="sin-asignar">${icono("aviso")}Sin asignar</span>`;
 }

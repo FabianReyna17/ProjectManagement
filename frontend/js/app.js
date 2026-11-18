@@ -534,7 +534,8 @@ async function vistaProyecto(id) {
             <li>
               ${persona(x.nombre)}
               <span class="tenue">${escapar(x.usuario)}</span>
-              <span class="funcion">${escapar(x.funcion)}${x.id === p.responsable_id ? " · a cargo del proyecto" : ""}</span>
+              <span class="funcion">${escapar(x.funcion)}${x.id === p.responsable_id ? " · a cargo del proyecto" : ""}${
+                x.cuenta_activa === false ? ` ${etiquetaCuentaDesactivada()}` : ""}</span>
               ${p.soy_responsable && x.id !== p.responsable_id
                 ? `<button type="button" class="boton chico peligro-suave" data-accion="retirar" data-id="${Number(x.id)}"
                      data-proyecto="${Number(p.id)}" data-nombre="${escapar(x.nombre)}">Retirar</button>` : ""}
@@ -818,11 +819,15 @@ ACCIONES.retirar = async (btn) => {
   if (ok) recargar();
 };
 
-// HU-01-001 Registrar cuenta + HU-01-002 Función inicial (solo Admin)
+// HU-01-001 Registrar cuenta + HU-01-002 Función inicial + HU-01-009 Desactivar cuenta (solo Admin)
 async function vistaUsuarios() {
   if (API.usuario()?.funcion !== "Admin") throw sinAcceso();
-  const [funciones, usuarios] = await Promise.all([API.get("/api/funciones"), API.get("/api/usuarios")]);
-  const total = `${usuarios.length} cuenta${usuarios.length === 1 ? "" : "s"} activa${usuarios.length === 1 ? "" : "s"}`;
+  const [funciones, cuentas] = await Promise.all([API.get("/api/funciones"), API.get("/api/usuarios?todas=1")]);
+  const yo = API.usuario()?.id;
+  const activas = cuentas.filter((x) => x.activo).length;
+  const inactivas = cuentas.length - activas;
+  const total = `${activas} cuenta${activas === 1 ? "" : "s"} activa${activas === 1 ? "" : "s"}` +
+    (inactivas ? ` · ${inactivas} desactivada${inactivas === 1 ? "" : "s"}` : "");
   return {
     titulo: "Usuarios",
     seccion: "usuarios",
@@ -852,18 +857,24 @@ async function vistaUsuarios() {
         </section>
         <section class="bloque" aria-labelledby="titulo-cuentas">
           <div class="encabezado-seccion">
-            <h2 class="titulo-seccion" id="titulo-cuentas">Cuentas activas</h2>
+            <h2 class="titulo-seccion" id="titulo-cuentas">Cuentas</h2>
             ${buscadorTabla("tabla-usuarios", "Buscar cuenta")}
           </div>
           <div class="tabla-marco">
             <table class="tabla tabla-tarjetas" id="tabla-usuarios">
-              <thead><tr>${th("Nombre", { clase: "col-principal" })}${th("Usuario")}${th("Función")}</tr></thead>
+              <thead><tr>${th("Nombre", { clase: "col-principal" })}${th("Usuario")}${th("Función")}${th("Estado")}${th("Acciones", { ordenable: false })}</tr></thead>
               <tbody>
-                ${usuarios.map((x) => `
-                  <tr>
+                ${cuentas.map((x) => `
+                  <tr${x.activo ? "" : ` class="fila-inactiva"`}>
                     <td data-label="Nombre" class="celda-principal" data-orden="${escapar(x.nombre)}">${persona(x.nombre)}</td>
                     <td data-label="Usuario">${escapar(x.usuario)}</td>
                     <td data-label="Función">${escapar(x.funcion)}</td>
+                    <td data-label="Estado" data-orden="${x.activo ? 0 : 1}">${x.activo ? "Activa" : `${etiquetaCuentaDesactivada()}
+                      <small class="tenue">${momento(x.desactivado_en)} · ${escapar(x.desactivado_por_nombre || "")}</small>`}</td>
+                    <td data-label="Acciones">${x.activo && x.id !== yo
+                      ? `<button type="button" class="boton chico peligro-suave" data-accion="desactivar-cuenta"
+                           data-id="${Number(x.id)}" data-nombre="${escapar(x.nombre)}">Desactivar</button>`
+                      : x.id === yo ? `<span class="tenue">Tu cuenta</span>` : ""}</td>
                   </tr>`).join("")}
               </tbody>
             </table>
@@ -884,6 +895,19 @@ async function vistaUsuarios() {
     },
   };
 }
+
+// HU-01-009 Desactivar cuenta, con confirmación. Repetirla no cambia nada (el servidor lo garantiza).
+ACCIONES["desactivar-cuenta"] = async (btn) => {
+  const si = await confirmar({
+    titulo: `¿Desactivar la cuenta de ${btn.dataset.nombre}?`,
+    mensaje: "No podrá volver a entrar y sus sesiones abiertas dejarán de servir. " +
+      "Sus proyectos, tareas, comentarios y cambios conservan su nombre.",
+    aceptar: "Desactivar cuenta", peligro: true,
+  });
+  if (!si) return;
+  const ok = await guardar(btn, () => API.post(`/api/usuarios/${btn.dataset.id}/desactivacion`), "Cuenta desactivada");
+  if (ok) recargar();
+};
 
 // HU-01-007 Pantalla de "sin acceso" (misma para recursos ajenos e inexistentes)
 function vistaSinAcceso() {

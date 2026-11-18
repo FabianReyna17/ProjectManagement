@@ -170,7 +170,7 @@ def ficha(proyecto: dict, usuario_id: int) -> dict:
 
 
 def listar_participantes(db, proyecto: dict) -> list:
-    return repo.listar_participantes(db, proyecto["id"])
+    return [{**x, "cuenta_activa": bool(x["cuenta_activa"])} for x in repo.listar_participantes(db, proyecto["id"])]
 
 
 def exigir_responsable(proyecto: dict, actor_id: int) -> None:

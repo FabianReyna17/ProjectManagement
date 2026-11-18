@@ -1,4 +1,4 @@
-"""Reglas de cuentas, funciones y sesiones (HU-01-001 a HU-01-004).
+"""Reglas de cuentas, funciones y sesiones (HU-01-001 a HU-01-004, HU-01-009).
 
 No importa FastAPI: se puede probar sin peticiones HTTP. Abre y cierra la
 transacción; los repositorios no hacen commit.
@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from ...core.errors import Conflicto, DatosInvalidos, DemasiadosIntentos, NoAutenticado
+from ...core.errors import Conflicto, DatosInvalidos, DemasiadosIntentos, NoAutenticado, NoEncontrado, Prohibido
 from ...core.intentos import Intentos
 from ...core.security import hash_password, nuevo_token, verificar_password
 from ...db.database import transaccion
@@ -95,8 +95,32 @@ def listar_funciones(db) -> list:
     return repo.listar_funciones(db)
 
 
-def listar_usuarios(db) -> list:
-    return repo.listar_usuarios_activos(db)
+def listar_usuarios(db, todas: bool = False, funcion: Optional[str] = None) -> list:
+    """Cuentas activas (para elegir personas). Con todas=True, también las desactivadas: solo Admin."""
+    if not todas:
+        return repo.listar_usuarios_activos(db)
+    if funcion != "Admin":
+        raise Prohibido()
+    return [_cuenta(c) for c in repo.listar_cuentas(db)]
+
+
+def _cuenta(row: dict) -> dict:
+    return {**row, "activo": bool(row["activo"])}
+
+
+def desactivar_cuenta(db, usuario_id: int, actor_id: int) -> dict:
+    """HU-01-009. La cuenta deja de entrar y sus sesiones abiertas dejan de servir; no se borra
+    nada de lo que hizo. Desactivar una cuenta ya desactivada no cambia nada (ni fecha ni actor)."""
+    if usuario_id == actor_id:
+        raise DatosInvalidos("No puedes desactivar tu propia cuenta")
+    if not repo.obtener_cuenta(db, usuario_id):
+        raise NoEncontrado("La cuenta no existe")
+    ahora = _texto(_ahora())
+    with transaccion(db):
+        if repo.marcar_desactivada(db, usuario_id, actor_id, ahora):
+            repo.borrar_sesiones_de(db, usuario_id)
+            repo.registrar_evento(db, usuario_id, "desactivacion", "activa", "desactivada", actor_id, ahora)
+    return _cuenta(repo.obtener_cuenta(db, usuario_id))
 
 
 def registrar_usuario(db, usuario: str, nombre: str, password: str, funcion_id: int,

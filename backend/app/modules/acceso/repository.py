@@ -51,6 +51,41 @@ def existe_funcion(db, funcion_id: int) -> bool:
     return uno(db, "SELECT 1 FROM funciones WHERE id = :id", id=funcion_id) is not None
 
 
+CUENTA = """SELECT u.id, u.usuario, u.nombre, f.nombre AS funcion, u.activo,
+                   u.desactivado_en, d.nombre AS desactivado_por_nombre
+            FROM usuarios u
+            JOIN funciones f     ON f.id = u.funcion_id
+            LEFT JOIN usuarios d ON d.id = u.desactivado_por"""
+
+
+def listar_cuentas(db) -> list:
+    """Todas las cuentas, activas primero (vista de administración)."""
+    return varios(db, f"{CUENTA} ORDER BY u.activo DESC, u.nombre")
+
+
+def obtener_cuenta(db, usuario_id: int) -> Optional[dict]:
+    return uno(db, f"{CUENTA} WHERE u.id = :id", id=usuario_id)
+
+
+def marcar_desactivada(db, usuario_id: int, actor_id: int, ahora: str) -> bool:
+    """Solo cambia una cuenta activa: False si ya estaba desactivada (nada cambia)."""
+    cur = db.execute(text("""UPDATE usuarios SET activo = 0, desactivado_en = :ahora, desactivado_por = :actor
+                             WHERE id = :id AND activo = 1"""),
+                     {"id": usuario_id, "actor": actor_id, "ahora": ahora})
+    return cur.rowcount > 0
+
+
+def borrar_sesiones_de(db, usuario_id: int) -> None:
+    db.execute(text("DELETE FROM sesiones WHERE usuario_id = :u"), {"u": usuario_id})
+
+
+def registrar_evento(db, usuario_id: int, tipo: str, anterior: Optional[str], nuevo: Optional[str],
+                     actor_id: int, ahora: str) -> None:
+    db.execute(text("""INSERT INTO eventos_cuenta (usuario_id, tipo, valor_anterior, valor_nuevo, actor_id, creado_en)
+                       VALUES (:u, :tipo, :anterior, :nuevo, :actor, :ahora)"""),
+               {"u": usuario_id, "tipo": tipo, "anterior": anterior, "nuevo": nuevo, "actor": actor_id, "ahora": ahora})
+
+
 def listar_usuarios_activos(db) -> list:
     return varios(db, """SELECT u.id, u.usuario, u.nombre, f.nombre AS funcion
                           FROM usuarios u JOIN funciones f ON f.id = u.funcion_id

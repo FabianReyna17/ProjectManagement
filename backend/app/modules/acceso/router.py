@@ -36,11 +36,20 @@ def listar_funciones(_=Depends(requiere_funcion("Admin")), db=Depends(get_db)):
 
 
 @router.get("/usuarios", tags=["usuarios"])
-def listar_usuarios(_=Depends(requiere_funcion("Admin", "Responsable")), db=Depends(get_db)):
-    return service.listar_usuarios(db)
+def listar_usuarios(todas: bool = False, u: dict = Depends(requiere_funcion("Admin", "Responsable")),
+                    db=Depends(get_db)):
+    """Cuentas activas; ?todas=1 incluye las desactivadas (solo Admin, HU-01-009)."""
+    return service.listar_usuarios(db, todas, u["funcion"])
 
 
 @router.post("/usuarios", status_code=201, tags=["usuarios"])
 def registrar_usuario(data: UsuarioIn, u: dict = Depends(requiere_funcion("Admin")),
                       clave=Depends(clave_idempotencia), db=Depends(get_db)):
     return service.registrar_usuario(db, data.usuario, data.nombre, data.password, data.funcion_id, u["id"], clave)
+
+
+# --- Mantenimiento de cuentas (HU-01-009) ---
+
+@router.post("/usuarios/{usuario_id}/desactivacion", tags=["usuarios"])
+def desactivar_cuenta(usuario_id: int, u: dict = Depends(requiere_funcion("Admin")), db=Depends(get_db)):
+    return service.desactivar_cuenta(db, usuario_id, u["id"])

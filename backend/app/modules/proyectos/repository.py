@@ -121,7 +121,8 @@ def retirar_participante(db, proyecto_id: int, usuario_id: int) -> bool:
 
 
 def listar_participantes(db, proyecto_id: int) -> list:
-    return varios(db, """SELECT u.id, u.usuario, u.nombre, f.nombre AS funcion, pa.agregado_en
+    return varios(db, """SELECT u.id, u.usuario, u.nombre, f.nombre AS funcion, pa.agregado_en,
+                                 u.activo AS cuenta_activa
                           FROM participantes pa
                           JOIN usuarios u  ON u.id = pa.usuario_id
                           JOIN funciones f ON f.id = u.funcion_id

@@ -29,5 +29,12 @@ class EstadoProyectoIn(Base):
     anterior: Optional[EstadoProyecto] = None
 
 
+class CierreIn(Base):
+    """HU-02-005. `justificacion` es obligatoria si quedan tareas abiertas. `revisadas` son los
+    ids de las tareas abiertas que se mostraron al revisar: si cambiaron mientras tanto → 409."""
+    justificacion: Optional[str] = Field(None, max_length=1000)
+    revisadas: Optional[list[int]] = None
+
+
 class ParticipanteIn(Base):
     usuario_id: int

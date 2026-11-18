@@ -96,6 +96,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 4 | HU-07-003 | Resumen en la ficha del proyecto: pendientes, en curso, terminadas, vencidas, por vencer y bloqueadas, más las próximas fechas límite. Se calcula sobre la misma lista que el tablero (solo datos confirmados) y cada cifra abre la lista con su filtro; nuevo filtro "Bloqueo" — `GET /api/proyectos/{id}/resumen`, `?bloqueo=bloqueada|sin_bloqueo` |
 | 5 | HU-07-005 | Vista "Estado general" (`g e`, solo Admin, Responsable y Supervisor): cada proyecto en el que la persona participa, con responsable, estado, fecha prevista de término, tareas vencidas y bloqueadas y abiertas. Los que tienen al menos una tarea vencida o bloqueada se marcan "Requiere atención" (propuesta de RP-07-03) y van primero. Las cifras son las del resumen de cada proyecto y cada una abre su lista filtrada; los cerrados se incluyen o excluyen con una casilla y los proyectos sin acceso ni aparecen ni se cuentan — `GET /api/estado-proyectos?incluir_cerrados=` |
 | 5 | HU-06-002 | Aviso de vencimiento cercano: cada tarea abierta con responsable que vence hoy o en los próximos 3 días (día de Guatemala) avisa a esa persona con la fecha límite vigente. Un mismo vencimiento (tarea + fecha) se avisa una sola vez aunque el proceso corra muchas veces; si la tarea se reprograma o se reasigna, el vencimiento nuevo sí se avisa. Las terminadas, las de proyectos cerrados y las de personas sin acceso no generan avisos |
+| 5 | HU-02-005 | Cerrar proyecto (solo su responsable) en "Cerrar proyecto": antes de confirmar se muestran las tareas que siguen abiertas; para cerrar con alguna abierta hay que terminarla o justificar la excepción (las tareas quedan tal como están). El cierre guarda fecha, quién, cuántas tareas seguían abiertas y la justificación, y el cambio de estado queda en "Cambios del plan". Repetir el cierre no duplica nada; si las tareas abiertas cambiaron mientras se revisaba → 409. Un proyecto cerrado solo se consulta: no admite tareas, cambios de plan o estado, avances, bloqueos, comentarios ni archivos (sí gestionar quién tiene acceso), y sus tareas salen de "Mis tareas" y de la atención del estado general — `GET/POST /api/proyectos/{id}/cierre` |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 
@@ -126,4 +127,4 @@ Al llegar la historia que lo necesite:
 
 ## Siguientes sprints
 
-Avisos de vencimiento y de cambios del plan, cierre de proyectos, carga por responsable, desactivar cuentas y respaldos.
+Avisos de cambios del plan, proyectos cerrados e historial, carga por responsable, corregir comentarios, desactivar cuentas y respaldos.

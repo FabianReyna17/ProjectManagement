@@ -334,6 +334,7 @@ async function vistaTarea(id) {
       <header class="ficha-encabezado">
         <h1 tabindex="-1">${escapar(t.nombre)}</h1>
         <div class="ficha-chips">${etiquetaEstado(t.estado, t.bloqueada)}${etiquetaVencimiento(t)}</div>
+        ${t.editable ? "" : `<p class="nota" role="note">${icono("est-cerrado")}El proyecto de esta tarea está cerrado: se conserva solo para consulta.</p>`}
       </header>
       <div class="ficha">
         <div class="ficha-contenido">
@@ -371,7 +372,7 @@ async function vistaTarea(id) {
               </form>` : ""}
           </section>
 
-          ${seccionColaboracion(actividad, reglas, "esta tarea")}
+          ${seccionColaboracion(actividad, reglas, "esta tarea", { soloLectura: !t.editable })}
 
           ${resueltos.length ? `
           <section class="bloque">

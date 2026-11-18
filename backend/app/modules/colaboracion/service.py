@@ -38,6 +38,7 @@ MSG_TIPO = "Ese tipo de archivo no está permitido. No se adjuntó"
 def comentar(db, proyecto_id: int, tarea_id: Optional[int], autor_id: int, texto: str,
              clave: Optional[str] = None) -> dict:
     """Guarda el comentario con autor y fecha. Un reintento con la misma clave no lo duplica."""
+    proyectos.exigir_abierto_id(db, proyecto_id)  # HU-02-005
     cid = crear_una_vez(db, autor_id, clave, "comentario",
                         lambda: repo.insertar_comentario(db, proyecto_id, tarea_id, texto, autor_id))
     return repo.obtener_comentario(db, cid)
@@ -74,6 +75,7 @@ def adjuntar(db, proyecto_id: int, tarea_id: Optional[int], autor_id: int, nombr
     """Valida tipo y tamaño, guarda el contenido y luego el registro en una transacción.
     Si el registro no se confirma, el contenido se borra: no queda un adjunto a medias.
     Un reintento con la misma clave devuelve el primer adjunto y no guarda una copia."""
+    proyectos.exigir_abierto_id(db, proyecto_id)  # HU-02-005
     nombre = _nombre_seguro(nombre)
     tipo = _tipo(nombre)
     if len(contenido) > MAX_BYTES:

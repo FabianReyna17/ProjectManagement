@@ -1,7 +1,8 @@
-"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001 a HU-06-003, HU-07-001 a HU-07-003, HU-07-005, HU-08-002, HU-08-003).
+"""Reglas de tareas (HU-02-005, HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001 a HU-06-003, HU-07-001 a HU-07-003, HU-07-005, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
+Las tareas de un proyecto cerrado solo se consultan: ningún cambio se acepta.
 Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
 Cada asignación avisa a la nueva persona responsable y cada bloqueo al responsable del
 proyecto, en la misma transacción que el cambio.
@@ -42,6 +43,12 @@ def _exigir_planificador(tarea: dict, actor_id: int) -> None:
         raise Prohibido()
 
 
+def _exigir_abierta(tarea: dict) -> None:
+    """HU-02-005: en un proyecto cerrado las tareas solo se consultan."""
+    if tarea["proyecto_estado"] == "cerrado":
+        raise DatosInvalidos(proyectos.MSG_CERRADO)
+
+
 def _iso(fecha: Optional[date]) -> Optional[str]:
     return fecha.isoformat() if fecha else None
 
@@ -50,6 +57,7 @@ def crear(db, proyecto: dict, actor_id: int, nombre: str, descripcion: str,
           resultado_esperado: Optional[str], responsable_id: Optional[int] = None,
           fecha_limite: Optional[date] = None, prioridad: str = "media", clave: Optional[str] = None) -> dict:
     proyectos.exigir_responsable(proyecto, actor_id)
+    proyectos.exigir_abierto(proyecto)
     if responsable_id is not None:
         _validar_responsable(db, proyecto["id"], responsable_id)
 
@@ -76,7 +84,7 @@ def obtener_autorizada(db, tarea_id: int, usuario_id: int) -> dict:
     if not tarea:
         raise Prohibido()
     proyecto = proyectos.obtener_autorizado(db, tarea["proyecto_id"], usuario_id)
-    return {**tarea, "proyecto_responsable_id": proyecto["responsable_id"]}
+    return {**tarea, "proyecto_responsable_id": proyecto["responsable_id"], "proyecto_estado": proyecto["estado"]}
 
 
 def _puede_cambiar_estado(tarea: dict, usuario_id: int) -> bool:
@@ -95,10 +103,12 @@ def _con_vencimiento(tarea: dict, dia) -> dict:
 
 
 def detalle(tarea: dict, usuario_id: int) -> dict:
-    puede = _puede_cambiar_estado(tarea, usuario_id)
+    abierta = tarea["proyecto_estado"] != "cerrado"  # HU-02-005: proyecto cerrado → solo consulta
+    puede = abierta and _puede_cambiar_estado(tarea, usuario_id)
     return {**_con_vencimiento(tarea, tiempo.hoy()),
             "puedo_bloquear": puede and not tarea["bloqueada"] and tarea["estado"] != "terminada",
-            "puedo_planificar": tarea["proyecto_responsable_id"] == usuario_id,
+            "puedo_planificar": abierta and tarea["proyecto_responsable_id"] == usuario_id,
+            "editable": abierta,
             "puedo_registrar_avance": puede,
             "soy_asignado": tarea["responsable_id"] == usuario_id,
             "transiciones": _transiciones(tarea) if puede else []}
@@ -133,7 +143,7 @@ def tablero(db, proyecto: dict, usuario_id: int, filtros: Optional[dict] = None)
     columnas = [{"estado": e, "nombre": n, "tareas": []} for e, n in NOMBRE_ESTADO.items()]
     por_estado = {c["estado"]: c["tareas"] for c in columnas}
     for t in listar_de_proyecto(db, proyecto, filtros):
-        puede = usuario_id in (t["responsable_id"], proyecto["responsable_id"])
+        puede = proyecto["estado"] != "cerrado" and usuario_id in (t["responsable_id"], proyecto["responsable_id"])
         por_estado[t["estado"]].append({**t, "transiciones": _transiciones(t) if puede else []})
     return {"columnas": columnas}
 
@@ -171,6 +181,38 @@ def generar_avisos_vencimiento(db, dia: Optional[date] = None) -> int:
                    for t in repo.listar_por_vencer(db, dia.isoformat(), hasta.isoformat()))
 
 
+# ---------- HU-02-005 Cerrar proyecto ----------
+
+MSG_JUSTIFICACION = "Quedan tareas abiertas: termínalas o justifica la excepción para cerrar el proyecto"
+MSG_ABIERTAS_CAMBIARON = ("Las tareas abiertas del proyecto cambiaron mientras revisabas el cierre. "
+                          "Revisa la lista actualizada; el proyecto no se cerró")
+
+
+def _abiertas(db, proyecto: dict) -> list:
+    return [t for t in listar_de_proyecto(db, proyecto) if t["estado"] != "terminada"]
+
+
+def revision_cierre(db, proyecto: dict, usuario_id: int) -> dict:
+    """Lo que se revisa antes de cerrar: las tareas que siguen abiertas (no se ocultan, RP-02-03)."""
+    ficha = proyectos.ficha(proyecto, usuario_id)
+    return {"abiertas": _abiertas(db, proyecto), "puedo_cerrar": ficha["puedo_cerrar"]}
+
+
+def cerrar_proyecto(db, proyecto: dict, actor_id: int, justificacion: Optional[str],
+                    revisadas: Optional[list] = None) -> dict:
+    """HU-02-005: solo el responsable. Si quedan tareas abiertas exige justificar la excepción
+    (política propuesta en RP-02-03); las tareas no se tocan. Repetir el cierre no hace nada."""
+    proyectos.exigir_responsable(proyecto, actor_id)
+    if proyecto["estado"] == "cerrado":
+        return proyectos.ficha(proyecto, actor_id)
+    abiertas = _abiertas(db, proyecto)
+    if revisadas is not None and sorted(revisadas) != sorted(t["id"] for t in abiertas):
+        raise Conflicto(MSG_ABIERTAS_CAMBIARON, {"abiertas": abiertas})
+    if abiertas and not justificacion:
+        raise DatosInvalidos(MSG_JUSTIFICACION, {"abiertas": abiertas})
+    return proyectos.cerrar(db, proyecto, actor_id, justificacion or None, len(abiertas))
+
+
 # HU-07-005: funciones que consultan el estado general (los integrantes ven sus tareas y proyectos)
 FUNCIONES_SUPERVISAN = ("Admin", "Responsable", "Supervisor")
 INDICADORES_ATENCION = ("vencidas", "bloqueadas")
@@ -180,6 +222,7 @@ def estado_general(db, usuario_id: int, incluir_cerrados: bool = False) -> dict:
     """HU-07-005: los proyectos en los que participa la persona (los demás ni aparecen ni se
     cuentan), con las cifras de su resumen (HU-07-003), así que coinciden con la ficha de cada uno.
     RP-07-03 (propuesta): requiere atención si tiene al menos una tarea vencida o bloqueada.
+    Un proyecto cerrado ya no requiere atención (HU-02-005) y va al final.
     Primero los que requieren atención; después por fecha prevista de término."""
     filas = []
     for p in proyectos.mis_proyectos(db, usuario_id):
@@ -188,8 +231,8 @@ def estado_general(db, usuario_id: int, incluir_cerrados: bool = False) -> dict:
         r = resumen(db, p)
         indicadores = {k: r["indicadores"][k] for k in INDICADORES_ATENCION}
         filas.append({**p, "total": r["total"], "abiertas": r["abiertas"], "indicadores": indicadores,
-                      "requiere_atencion": any(i["total"] for i in indicadores.values())})
-    filas.sort(key=lambda f: (not f["requiere_atencion"], f["fecha_fin"], f["id"]))
+                      "requiere_atencion": p["estado"] != "cerrado" and any(i["total"] for i in indicadores.values())})
+    filas.sort(key=lambda f: (f["estado"] == "cerrado", not f["requiere_atencion"], f["fecha_fin"], f["id"]))
     totales = {"proyectos": len(filas), "requieren_atencion": sum(f["requiere_atencion"] for f in filas),
                **{k: sum(f["indicadores"][k]["total"] for f in filas) for k in INDICADORES_ATENCION}}
     return {"proyectos": filas, "totales": totales}
@@ -203,6 +246,7 @@ def mis_tareas(db, usuario_id: int) -> list:
 def asignar(db, tarea: dict, actor_id: int, usuario_id: int) -> dict:
     """HU-03-002: si la validación falla no se toca al responsable anterior."""
     _exigir_planificador(tarea, actor_id)
+    _exigir_abierta(tarea)
     _validar_responsable(db, tarea["proyecto_id"], usuario_id)
     if tarea["responsable_id"] != usuario_id:
         with transaccion(db):
@@ -215,6 +259,7 @@ def planificar(db, tarea: dict, actor_id: int, fecha_limite: Optional[date], pri
     """HU-03-003: fecha límite (puede quedar sin fecha) y prioridad. Cada valor que cambia
     se registra con su valor anterior. La validación de formato y catálogo la hace el esquema."""
     _exigir_planificador(tarea, actor_id)
+    _exigir_abierta(tarea)
     nueva_fecha = _iso(fecha_limite)
     cambios = [(campo, tarea[campo], nuevo)
                for campo, nuevo in (("fecha_limite", nueva_fecha), ("prioridad", prioridad))
@@ -245,6 +290,7 @@ def replanificar(db, tarea: dict, actor_id: int, responsable_id: Optional[int],
     guarda nada. Reasignar no toca el estado, los bloqueos ni el historial previo.
     HU-08-003: con `leidos`, un campo que otra persona cambió mientras tanto da conflicto."""
     _exigir_planificador(tarea, actor_id)
+    _exigir_abierta(tarea)
     nuevos = {"responsable_id": responsable_id, "fecha_limite": _iso(fecha_limite), "prioridad": prioridad}
     cambios, en_conflicto = concurrencia.cambios_a_aplicar(tarea, nuevos, leidos)
     if en_conflicto:
@@ -275,6 +321,7 @@ def cambiar_estado(db, tarea: dict, actor_id: int, estado: str, leido: Optional[
     HU-08-003: si el estado ya no es el que se veía (`leido`), conflicto en lugar de pisarlo."""
     if not _puede_cambiar_estado(tarea, actor_id):
         raise Prohibido(MSG_ESTADO_PERMISO)
+    _exigir_abierta(tarea)
     actual = tarea["estado"]
     if estado != actual:
         if leido is not None and leido != actual:
@@ -300,6 +347,7 @@ def registrar_avance(db, tarea: dict, actor_id: int, texto: str, clave: Optional
     No cambia el estado ni se borra al reasignar."""
     if not _puede_cambiar_estado(tarea, actor_id):
         raise Prohibido(MSG_AVANCE_PERMISO)
+    _exigir_abierta(tarea)
 
     def insertar() -> int:
         aid = repo.insertar_avance(db, tarea["id"], texto, actor_id)
@@ -318,6 +366,7 @@ def registrar_bloqueo(db, tarea: dict, actor_id: int, motivo: str, clave: Option
     HU-06-003: avisa al responsable del proyecto; un reintento no repite el aviso."""
     if not _puede_cambiar_estado(tarea, actor_id):
         raise Prohibido(MSG_BLOQUEO_PERMISO)
+    _exigir_abierta(tarea)
     if tarea["estado"] == "terminada":
         raise DatosInvalidos("No se puede bloquear una tarea terminada")
 
@@ -343,6 +392,7 @@ def resolver_bloqueo(db, tarea: dict, actor_id: int, bloqueo_id: int, resolucion
     """HU-04-004: solo el responsable del proyecto; exige explicación. El bloqueo se conserva
     con motivo y resolución; la tarea sigue en su estado de trabajo. Uno ya resuelto → Conflicto."""
     _exigir_planificador(tarea, actor_id)
+    _exigir_abierta(tarea)
     bloqueo = repo.obtener_bloqueo(db, bloqueo_id)
     if not bloqueo or bloqueo["tarea_id"] != tarea["id"]:
         raise NoEncontrado("El bloqueo no existe en esta tarea")

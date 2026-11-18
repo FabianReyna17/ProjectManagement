@@ -171,6 +171,24 @@
 .lista-proximas { display: grid; gap: var(--e-1); }
 .lista-proximas li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--e-2); }
 
+/* ---------- Cierre del proyecto (HU-02-005) ---------- */
+
+.hoja-ancha { max-width: 860px; }
+#f-cierre { margin-top: var(--e-6); }
+.hoja-ancha > .subtitulo { margin: calc(var(--e-6) * -1 + var(--e-2)) 0 var(--e-6); }
+.banda-cierre {
+  display: grid;
+  gap: var(--e-2);
+  margin-bottom: var(--e-6);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-2);
+  background: var(--superficie-2);
+}
+.banda-cierre h2 { display: flex; align-items: center; gap: var(--e-2); font-size: var(--t-md, 15px); }
+.banda-cierre p { color: var(--texto-2); }
+.banda-cierre strong { color: var(--texto); font-weight: var(--peso-medio); }
+
 /* ---------- Estado general de los proyectos (HU-07-005) ---------- */
 
 .casilla { display: inline-flex; align-items: center; gap: var(--e-2); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }

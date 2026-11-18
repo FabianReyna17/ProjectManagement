@@ -37,8 +37,10 @@ ULTIMO_ESTADO = """FROM historial_proyectos h JOIN usuarios a ON a.id = h.actor_
 def obtener_con_responsable(db, proyecto_id: int) -> Optional[dict]:
     return uno(db, f"""SELECT p.*, r.nombre AS responsable_nombre,
                                (SELECT a.nombre {ULTIMO_ESTADO}) AS estado_actor_nombre,
-                               (SELECT h.creado_en {ULTIMO_ESTADO}) AS estado_cambiado_en
+                               (SELECT h.creado_en {ULTIMO_ESTADO}) AS estado_cambiado_en,
+                               ce.nombre AS cerrado_por_nombre
                         FROM proyectos p JOIN usuarios r ON r.id = p.responsable_id
+                        LEFT JOIN usuarios ce ON ce.id = p.cerrado_por
                         WHERE p.id = :id""", id=proyecto_id)
 
 
@@ -57,6 +59,15 @@ def actualizar_estado(db, proyecto_id: int, actual: str, estado: str) -> bool:
     """Cambia el estado solo si sigue siendo `actual` (False si otra persona lo cambió)."""
     cur = db.execute(text("UPDATE proyectos SET estado = :e WHERE id = :id AND estado = :actual"),
                      {"e": estado, "actual": actual, "id": proyecto_id})
+    return cur.rowcount > 0
+
+
+def cerrar(db, proyecto_id: int, actual: str, actor_id: int, justificacion: Optional[str], abiertas: int) -> bool:
+    """HU-02-005: cierra solo si el estado sigue siendo `actual` (False si otra persona lo cambió)."""
+    cur = db.execute(text("""UPDATE proyectos SET estado = 'cerrado', cerrado_en = CURRENT_TIMESTAMP,
+                                    cerrado_por = :a, cierre_justificacion = :j, cierre_tareas_abiertas = :n
+                             WHERE id = :id AND estado = :actual"""),
+                     {"a": actor_id, "j": justificacion, "n": abiertas, "id": proyecto_id, "actual": actual})
     return cur.rowcount > 0
 
 

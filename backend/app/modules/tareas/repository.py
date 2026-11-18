@@ -52,14 +52,15 @@ def listar_de_proyecto(db, proyecto_id: int) -> list:
 
 def listar_asignadas(db, usuario_id: int) -> list:
     """Tareas asignadas al usuario en proyectos donde aún participa.
-    Mismo orden que la lista del proyecto (ORDEN_LISTA)."""
+    Mismo orden que la lista del proyecto (ORDEN_LISTA). Las de proyectos cerrados ya no
+    son trabajo pendiente: se consultan desde el proyecto (HU-02-005)."""
     return varios(db, f"""SELECT {COLUMNAS_LISTA}, p.nombre AS proyecto_nombre
                            FROM tareas t
                            JOIN proyectos p     ON p.id = t.proyecto_id
                            JOIN participantes pa ON pa.proyecto_id = t.proyecto_id
                                                 AND pa.usuario_id = :u AND pa.activo = 1
                            LEFT JOIN usuarios r ON r.id = t.responsable_id
-                           WHERE t.responsable_id = :u
+                           WHERE t.responsable_id = :u AND p.estado != 'cerrado'
                            ORDER BY {ORDEN_LISTA}""", u=usuario_id)
 
 

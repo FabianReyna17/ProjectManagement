@@ -16,7 +16,7 @@ const FILTROS_ACTIVIDAD = { todo: "Todo", comentario: "Comentarios", archivo: "A
  * Comentarios y archivos del proyecto o la tarea en orden de publicación, con un filtro
  * (Todo / Comentarios / Archivos) y, debajo, los formularios para comentar y adjuntar.
  */
-function seccionColaboracion(actividad, reglas, destino) {
+function seccionColaboracion(actividad, reglas, destino, { soloLectura = false } = {}) {
   const cuenta = { todo: actividad.length, comentario: 0, archivo: 0 };
   actividad.forEach((x) => cuenta[x.tipo]++);
   return `
@@ -30,15 +30,16 @@ function seccionColaboracion(actividad, reglas, destino) {
       </div>
       ${actividad.length
         ? `<ol class="lista-cambios lista-actividad">${actividad.map((x) => (x.tipo === "archivo" ? itemArchivo(x) : itemComentario(x))).join("")}</ol>`
-        : `<p class="tenue">Aún no hay comentarios ni archivos. Deja aquí dudas, decisiones y material sobre ${escapar(destino)}.</p>`}
-      <div class="colaboracion-formularios">
+        : `<p class="tenue">${soloLectura ? "No hay comentarios ni archivos."
+            : `Aún no hay comentarios ni archivos. Deja aquí dudas, decisiones y material sobre ${escapar(destino)}.`}</p>`}
+      ${soloLectura ? "" : `<div class="colaboracion-formularios">
         <form id="f-comentario" class="formulario compacto">
           <label>Nuevo comentario <textarea name="texto" required rows="2" maxlength="2000"
             placeholder="Escribe una duda, una decisión o un dato útil"></textarea></label>
           <div class="acciones-form"><button class="boton secundario chico">Comentar</button></div>
         </form>
         ${formularioArchivo(reglas)}
-      </div>
+      </div>`}
     </section>`;
 }
 

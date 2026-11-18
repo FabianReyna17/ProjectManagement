@@ -1,4 +1,4 @@
-"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001 a HU-02-004, HU-08-002, HU-08-003).
+"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001 a HU-02-005, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para datos de cuentas usa el servicio de acceso, nunca su repositorio.
 """
@@ -15,6 +15,19 @@ from . import repository as repo
 
 def mis_proyectos(db, usuario_id: int) -> list:
     return repo.listar_de_participante(db, usuario_id)
+
+
+MSG_CERRADO = "El proyecto está cerrado: su información se conserva solo para consulta"
+
+
+def exigir_abierto(proyecto: dict) -> None:
+    """HU-02-005: un proyecto cerrado no admite cambios (sí consultas y gestión de accesos)."""
+    if proyecto["estado"] == "cerrado":
+        raise DatosInvalidos(MSG_CERRADO)
+
+
+def exigir_abierto_id(db, proyecto_id: int) -> None:
+    exigir_abierto(repo.obtener(db, proyecto_id))
 
 
 MSG_FECHAS = "La fecha de fin no puede ser anterior a la de inicio"
@@ -68,6 +81,7 @@ def actualizar(db, proyecto: dict, actor_id: int, nombre: str, objetivo: str, re
     HU-08-003: con `leidos`, un dato que otra persona cambió mientras tanto da conflicto;
     los cambios ajenos en otros datos se conservan."""
     exigir_responsable(proyecto, actor_id)
+    exigir_abierto(proyecto)
     nuevos = {"nombre": nombre, "objetivo": objetivo, "responsable_id": responsable_id,
               "fecha_inicio": fecha_inicio.isoformat(), "fecha_fin": fecha_fin.isoformat()}
     cambios, en_conflicto = concurrencia.cambios_a_aplicar(proyecto, nuevos, leidos)
@@ -125,6 +139,20 @@ def cambiar_estado(db, proyecto: dict, actor_id: int, estado: str, leido: Option
     return ficha(repo.obtener_con_responsable(db, proyecto["id"]), actor_id)
 
 
+def cerrar(db, proyecto: dict, actor_id: int, justificacion: Optional[str], abiertas: int) -> dict:
+    """HU-02-005 (la revisión de tareas abiertas la hace el servicio de tareas): registra fecha,
+    actor, tareas abiertas y justificación, y el cambio de estado en el historial. Cerrar un
+    proyecto ya cerrado (reintento o doble clic) no hace nada: no duplica el evento."""
+    exigir_responsable(proyecto, actor_id)
+    if proyecto["estado"] != "cerrado":
+        with transaccion(db):
+            if repo.cerrar(db, proyecto["id"], proyecto["estado"], actor_id, justificacion, abiertas):
+                repo.registrar_cambio(db, proyecto["id"], "estado", proyecto["estado"], "cerrado", actor_id)
+            elif repo.obtener(db, proyecto["id"])["estado"] != "cerrado":
+                raise _conflicto_estado(repo.obtener(db, proyecto["id"])["estado"])
+    return ficha(repo.obtener_con_responsable(db, proyecto["id"]), actor_id)
+
+
 def historial(db, proyecto: dict) -> list:
     return repo.listar_historial(db, proyecto["id"])
 
@@ -135,7 +163,9 @@ def es_participante(db, proyecto_id: int, usuario_id: int) -> bool:
 
 def ficha(proyecto: dict, usuario_id: int) -> dict:
     soy_responsable = proyecto["responsable_id"] == usuario_id
-    return {**proyecto, "soy_responsable": soy_responsable,
+    abierto = proyecto["estado"] != "cerrado"
+    return {**proyecto, "soy_responsable": soy_responsable, "editable": abierto,
+            "puedo_cerrar": soy_responsable and abierto,
             "transiciones": _transiciones(proyecto) if soy_responsable else []}
 
 

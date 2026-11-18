@@ -6,13 +6,8 @@ from .test_sprint2 import crear_tarea, esc  # noqa: F401  (esc es el escenario d
 from .test_sprint4 import en_dias, escenario_resumen
 
 
-def cerrar_en_bd(pid):
-    """El cierre llega con HU-02-005; aquí solo se deja el proyecto en ese estado."""
-    from sqlalchemy import text
-
-    from app.db.database import get_engine
-    with get_engine().begin() as conn:
-        conn.execute(text("UPDATE proyectos SET estado = 'cerrado' WHERE id = :id"), {"id": pid})
+def cerrar(e, pid=None, h=None, **datos):
+    return e.c.post(f"/api/proyectos/{pid or e.pid}/cierre", headers=h or e.ana, json=datos)
 
 
 # HU-07-005 Estado general de los proyectos
@@ -85,12 +80,13 @@ def test_requiere_atencion_con_tareas_vencidas_o_bloqueadas(sup):
 
 
 def test_cerrados_se_incluyen_o_excluyen(sup):
-    cerrar_en_bd(sup.pid)
+    assert cerrar(sup, justificacion="Se cancela el sitio").status_code == 200
     r = estado_general(sup, sup.sofia)
     assert [p["nombre"] for p in r["proyectos"]] == ["App"]
     assert r["totales"] == {"proyectos": 1, "requieren_atencion": 0, "vencidas": 0, "bloqueadas": 0}
     r = estado_general(sup, sup.sofia, incluir_cerrados="true")
-    assert [(p["nombre"], p["estado"]) for p in r["proyectos"]] == [("Web", "cerrado"), ("App", "planificado")]
+    assert [(p["nombre"], p["estado"], p["requiere_atencion"]) for p in r["proyectos"]] == \
+        [("App", "planificado", False), ("Web", "cerrado", False)]  # cerrado: al final y sin marca de atención
 
 
 def test_estado_general_sin_permiso_o_sin_proyectos(sup):
@@ -180,3 +176,107 @@ def test_proceso_programado_se_puede_correr_aparte(esc):
     crear_tarea(esc, "Cerca", responsable_id=esc.beto_id, fecha_limite=en_dias(1))
     assert programado.ejecutar_una_vez() == 1
     assert programado.ejecutar_una_vez() == 0
+
+
+# HU-02-005 Cerrar proyecto
+def ficha(e, h=None, pid=None):
+    r = e.c.get(f"/api/proyectos/{pid or e.pid}", headers=h or e.ana)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_cerrar_sin_tareas_abiertas_registra_fecha_y_actor(esc):
+    t = crear_tarea(esc, "Hecha")
+    for est in ("en_curso", "terminada"):
+        esc.c.put(f"/api/tareas/{t['id']}/estado", headers=esc.ana, json={"estado": est})
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/cierre", headers=esc.ana).json() == {"abiertas": [], "puedo_cerrar": True}
+    r = cerrar(esc)
+    assert r.status_code == 200, r.text
+    p = r.json()
+    assert (p["estado"], p["cerrado_por_nombre"], p["cierre_tareas_abiertas"], p["cierre_justificacion"]) == \
+        ("cerrado", "Ana", 0, None)
+    assert p["cerrado_en"] and p["editable"] is False and p["puedo_cerrar"] is False
+    [cambio] = esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.beto).json()
+    assert (cambio["campo"], cambio["valor_anterior"], cambio["valor_nuevo"], cambio["actor_nombre"]) == \
+        ("estado", "planificado", "cerrado", "Ana")
+
+
+def test_tareas_abiertas_exigen_justificar_la_excepcion(esc):
+    abierta = crear_tarea(esc, "Pendiente", responsable_id=esc.beto_id)
+    crear_tarea(esc, "Otra")
+    revision = esc.c.get(f"/api/proyectos/{esc.pid}/cierre", headers=esc.ana).json()
+    assert [t["nombre"] for t in revision["abiertas"]] == ["Pendiente", "Otra"]
+    r = cerrar(esc)
+    assert r.status_code == 400 and len(r.json()["abiertas"]) == 2
+    assert cerrar(esc, justificacion="   ").status_code == 400
+    assert ficha(esc)["estado"] == "planificado"
+    r = cerrar(esc, justificacion="El cliente canceló la segunda fase", revisadas=[t["id"] for t in revision["abiertas"]])
+    assert r.status_code == 200, r.text
+    assert (r.json()["cierre_tareas_abiertas"], r.json()["cierre_justificacion"]) == (2, "El cliente canceló la segunda fase")
+    # las tareas se conservan tal como estaban
+    detalle = esc.c.get(f"/api/tareas/{abierta['id']}", headers=esc.beto).json()
+    assert (detalle["estado"], detalle["responsable_id"]) == ("pendiente", esc.beto_id)
+    assert len(esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.beto).json()) == 2
+
+
+def test_solo_el_responsable_cierra(esc):
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/cierre", headers=esc.beto).json()["puedo_cerrar"] is False
+    assert cerrar(esc, h=esc.beto).status_code == 403
+    assert cerrar(esc, h=esc.carla).status_code == 403
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/cierre", headers=esc.carla).status_code == 403
+    assert esc.c.put(f"/api/proyectos/{esc.pid}/estado", headers=esc.ana, json={"estado": "cerrado"}).status_code == 400
+    assert ficha(esc)["estado"] == "planificado"
+
+
+def test_repetir_el_cierre_no_duplica_el_evento(esc):
+    primero = cerrar(esc).json()
+    segundo = cerrar(esc, justificacion="otra cosa")
+    assert segundo.status_code == 200
+    assert {k: segundo.json()[k] for k in ("cerrado_en", "cierre_justificacion")} == \
+        {k: primero[k] for k in ("cerrado_en", "cierre_justificacion")}
+    assert len(esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.ana).json()) == 1
+
+
+def test_tareas_abiertas_cambiaron_durante_la_revision(esc):
+    t = crear_tarea(esc, "Pendiente")
+    crear_tarea(esc, "Nueva mientras tanto")
+    r = cerrar(esc, justificacion="Cancelado", revisadas=[t["id"]])
+    assert r.status_code == 409 and len(r.json()["abiertas"]) == 2
+    assert ficha(esc)["estado"] == "planificado"
+
+
+def test_proyecto_cerrado_solo_se_consulta(esc):
+    from .test_sprint4 import PDF, adjuntar, comentar
+    t = crear_tarea(esc, "Pendiente", responsable_id=esc.beto_id)
+    url_p, url_t = f"/api/proyectos/{esc.pid}", f"/api/tareas/{t['id']}"
+    assert adjuntar(esc, url_p, esc.beto).status_code == 201
+    assert comentar(esc, url_t, esc.beto, "Antes del cierre").status_code == 201
+    assert cerrar(esc, justificacion="Cancelado").status_code == 200
+
+    rechazos = [
+        esc.c.post(f"{url_p}/tareas", headers=esc.ana, json={"nombre": "X", "descripcion": "Y"}),
+        esc.c.put(url_p, headers=esc.ana, json={"nombre": "Otro", "objetivo": "Sitio", "responsable_id": esc.ana_id,
+                                                 "fecha_inicio": "2026-11-01", "fecha_fin": "2026-12-01"}),
+        esc.c.put(f"{url_t}/estado", headers=esc.beto, json={"estado": "en_curso"}),
+        esc.c.put(f"{url_t}/responsable", headers=esc.ana, json={"usuario_id": esc.ana_id}),
+        esc.c.put(f"{url_t}/plan", headers=esc.ana, json={"responsable_id": None, "fecha_limite": None, "prioridad": "alta"}),
+        esc.c.post(f"{url_t}/avances", headers=esc.beto, json={"texto": "Avance"}),
+        esc.c.post(f"{url_t}/bloqueos", headers=esc.beto, json={"motivo": "Falta acceso"}),
+        comentar(esc, url_p, esc.beto, "Después del cierre"),
+        adjuntar(esc, url_t, esc.beto),
+    ]
+    assert [r.status_code for r in rechazos] == [400] * len(rechazos)
+    assert all(r.json()["detail"].startswith("El proyecto está cerrado") for r in rechazos)
+
+    # todo se sigue consultando y nada cambió
+    d = esc.c.get(url_t, headers=esc.beto).json()
+    assert (d["estado"], d["transiciones"], d["puedo_planificar"], d["puedo_bloquear"], d["editable"]) == \
+        ("pendiente", [], False, False, False)
+    assert len(esc.c.get(f"{url_t}/comentarios", headers=esc.beto).json()) == 1
+    [archivo] = esc.c.get(f"{url_p}/archivos", headers=esc.beto).json()
+    assert esc.c.get(f"/api/archivos/{archivo['id']}/descarga", headers=esc.beto).content == PDF
+    tablero = esc.c.get(f"{url_p}/tablero", headers=esc.ana).json()
+    assert all(c["transiciones"] == [] for col in tablero["columnas"] for c in col["tareas"])
+    assert esc.c.get("/api/mis-tareas", headers=esc.beto).json() == []  # ya no es trabajo pendiente
+    # el acceso se sigue administrando (p. ej. dar acceso a quien debe consultarlo)
+    assert esc.c.post(f"{url_p}/participantes", headers=esc.ana, json={"usuario_id": esc.carla_id}).status_code == 201

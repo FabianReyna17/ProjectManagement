@@ -9,6 +9,7 @@ const rutas = [
   { patron: /^#\/proyectos\/nuevo$/, vista: vistaNuevoProyecto, esqueleto: "form" },
   { patron: /^#\/proyectos\/(\d+)$/, vista: vistaProyecto, esqueleto: "ficha" },
   { patron: /^#\/proyectos\/(\d+)\/editar$/, vista: vistaEditarProyecto, esqueleto: "form" },
+  { patron: /^#\/proyectos\/(\d+)\/cerrar$/, vista: vistaCerrarProyecto, esqueleto: "form" },
   { patron: /^#\/proyectos\/(\d+)\/tareas\/nueva$/, vista: vistaNuevaTarea, esqueleto: "form" },
   { patron: /^#\/tareas\/(\d+)$/, vista: vistaTarea, esqueleto: "ficha" },
   { patron: /^#\/mis-tareas$/, vista: vistaMisTareas, esqueleto: "tabla" },
@@ -449,13 +450,14 @@ async function vistaProyecto(id) {
   Estado.tareasProyecto = { pid: p.id, nombre: p.nombre, tareas };
   anotarReciente(p.id);
   const nuevaTarea = `#/proyectos/${p.id}/tareas/nueva`;
+  const planifica = p.soy_responsable && p.editable;  // HU-02-005: cerrado → solo consulta
   const abiertas = tareas.filter((t) => t.estado !== "terminada").length;
   const resumen = `${abiertas} abierta${abiertas === 1 ? "" : "s"} de ${tareas.length}`;
 
   return {
     titulo: p.nombre,
     seccion: "proyectos",
-    nueva: p.soy_responsable ? nuevaTarea : null,
+    nueva: planifica ? nuevaTarea : null,
     textoNueva: `Nueva tarea en «${p.nombre}»`,
     migas: [{ texto: "Mis proyectos", href: "#/proyectos" }, { texto: p.nombre }],
     html: `
@@ -472,10 +474,13 @@ async function vistaProyecto(id) {
           ${botonCopiarEnlace(`#/proyectos/${p.id}`)}
           ${p.transiciones.includes("en_curso") ? `<button type="button" class="boton secundario" data-accion="iniciar-proyecto"
               data-id="${Number(p.id)}" data-estado="${escapar(p.estado)}">${icono("est-en_curso")}Iniciar ejecución</button>` : ""}
-          ${p.soy_responsable ? `<a class="boton secundario" href="#/proyectos/${p.id}/editar">Editar proyecto</a>` : ""}
-          ${p.soy_responsable ? `<a class="boton" href="${nuevaTarea}">${icono("mas")}Nueva tarea</a>` : ""}
+          ${p.puedo_cerrar ? `<a class="boton secundario" href="#/proyectos/${p.id}/cerrar">${icono("est-cerrado")}Cerrar proyecto</a>` : ""}
+          ${planifica ? `<a class="boton secundario" href="#/proyectos/${p.id}/editar">Editar proyecto</a>` : ""}
+          ${planifica ? `<a class="boton" href="${nuevaTarea}">${icono("mas")}Nueva tarea</a>` : ""}
         </div>
       </header>
+
+      ${p.estado === "cerrado" ? bandaCierre(p) : ""}
 
       <section class="bloque">
         <h2 class="titulo-seccion">Objetivo</h2>
@@ -498,7 +503,7 @@ async function vistaProyecto(id) {
           ? vacio("Ninguna tarea cumple los filtros", "Cambia algún filtro o quítalos para ver todas las tareas.",
               `<button type="button" class="boton secundario" data-accion="quitar-filtros" data-proyecto="${p.id}">Quitar filtros</button>`)
           : tareas.length === 0
-          ? (p.soy_responsable
+          ? (planifica
             ? vacio("Este proyecto no tiene tareas", "Divide el objetivo en tareas y asígnalas al equipo.",
                 `<a class="boton" href="${nuevaTarea}">${icono("mas")}Crear la primera tarea</a>`)
             : vacio("Este proyecto no tiene tareas", "El responsable del proyecto aún no ha creado ninguna."))
@@ -530,7 +535,7 @@ async function vistaProyecto(id) {
           </form>` : `<p class="tenue">Todas las cuentas activas ya participan.</p>`) : ""}
       </section>
 
-      ${seccionColaboracion(actividad, reglas, "el proyecto")}
+      ${seccionColaboracion(actividad, reglas, "el proyecto", { soloLectura: !p.editable })}
 
       ${cambios.length ? `
       <section class="bloque" aria-labelledby="titulo-cambios">
@@ -575,6 +580,77 @@ ACCIONES["iniciar-proyecto"] = async (btn) => {
   if (ok) { cargarProyectos(); recargar(); }
   else recargar();  // 409/400: muestra el estado vigente
 };
+
+// ---------- HU-02-005 Cerrar proyecto ----------
+
+/** Constancia del cierre: cuándo, quién, cuántas tareas seguían abiertas y por qué. */
+function bandaCierre(p) {
+  const abiertas = Number(p.cierre_tareas_abiertas) || 0;
+  return `
+    <section class="banda-cierre" aria-labelledby="titulo-cierre">
+      <h2 id="titulo-cierre">${icono("est-cerrado")}Proyecto cerrado</h2>
+      <p>Cerrado ${momento(p.cerrado_en)} por ${escapar(p.cerrado_por_nombre || "—")}.
+        ${abiertas ? `${abiertas} tarea${abiertas === 1 ? " seguía abierta" : "s seguían abiertas"} al cerrarlo.` : "Todas sus tareas estaban terminadas."}
+        Su información se conserva solo para consulta.</p>
+      ${p.cierre_justificacion ? `<p class="texto-largo"><strong>Justificación:</strong> ${escapar(p.cierre_justificacion)}</p>` : ""}
+    </section>`;
+}
+
+async function vistaCerrarProyecto(id) {
+  const p = await API.get(`/api/proyectos/${id}`);
+  if (!p.soy_responsable) throw sinAcceso();
+  if (!p.puedo_cerrar) { location.replace(`#/proyectos/${p.id}`); return null; }  // ya cerrado
+  const { abiertas } = await API.get(`/api/proyectos/${id}/cierre`);
+  const n = abiertas.length;
+  return {
+    titulo: `Cerrar · ${p.nombre}`,
+    seccion: "proyectos",
+    migas: [{ texto: "Mis proyectos", href: "#/proyectos" }, { texto: p.nombre, href: `#/proyectos/${p.id}` },
+            { texto: "Cerrar" }],
+    html: `
+      <div class="hoja hoja-ancha">
+        <h1 tabindex="-1">Cerrar proyecto</h1>
+        <p class="subtitulo">El proyecto dejará de estar activo. Sus tareas, comentarios, archivos e historial se conservan
+          para consulta, pero ya no se podrán modificar. Quedará registrado quién lo cerró y cuándo.</p>
+        <section class="bloque" aria-labelledby="titulo-abiertas">
+          <h2 class="titulo-seccion" id="titulo-abiertas">Tareas abiertas <span class="conteo">${n}</span></h2>
+          ${n ? `<p class="nota" role="note">${icono("aviso")}Estas tareas no están terminadas. Termínalas antes de cerrar
+                   o documenta la excepción: seguirán abiertas tal como están.</p>
+                 ${tablaTareas(abiertas, { id: "tabla-abiertas" })}`
+              : `<p class="tenue">${icono("ok")} Todas las tareas están terminadas.</p>`}
+        </section>
+        <form id="f-cierre" class="formulario" data-revisadas="${escapar(JSON.stringify(abiertas.map((t) => t.id)))}">
+          <label>${n ? "Justificación de la excepción" : "Nota de cierre (opcional)"}
+            <textarea name="justificacion" rows="3" maxlength="1000" ${n ? "required" : ""}
+              placeholder="${n ? "Por qué se cierra con tareas abiertas (p. ej. el cliente canceló esa fase)" : "Cómo terminó el proyecto"}"></textarea></label>
+          <div class="acciones-form">
+            <button class="boton peligro">${icono("est-cerrado")}Cerrar proyecto</button>
+            <a class="boton secundario" href="#/proyectos/${p.id}">Cancelar</a>
+          </div>
+        </form>
+      </div>`,
+    montar() {
+      const form = document.getElementById("f-cierre");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const si = await confirmar({
+          titulo: `¿Cerrar «${p.nombre}»?`,
+          mensaje: "Ya no se podrán crear ni modificar tareas, comentarios ni archivos. Esta acción no se puede deshacer desde la aplicación.",
+          aceptar: "Cerrar proyecto", peligro: true,
+        });
+        if (!si) return;
+        const datos = { justificacion: datosForm(form).justificacion || null, revisadas: JSON.parse(form.dataset.revisadas) };
+        const ok = await guardar(form.querySelector("button:not([type=button])"),
+          () => API.post(`/api/proyectos/${id}/cierre`, datos), "Proyecto cerrado", {
+            form, alConflicto: () => { Formularios.marcarLimpio(form); recargar(); } });  // la lista cambió: mostrar la vigente
+        if (ok) {
+          cargarProyectos();
+          location.hash = `#/proyectos/${id}`;
+        }
+      });
+    },
+  };
+}
 
 // HU-02-003: un cambio del plan con valor anterior, nuevo, actor y fecha
 const CAMPOS_PROYECTO = { nombre: "Nombre", objetivo: "Objetivo", responsable_id: "Responsable",

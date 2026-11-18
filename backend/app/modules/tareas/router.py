@@ -7,6 +7,7 @@ from ...core.cabeceras import clave_idempotencia
 from ...db.database import get_db
 from ..acceso.deps import requiere_funcion, usuario_actual
 from ..proyectos.deps import proyecto_autorizado
+from ..proyectos.schemas import CierreIn
 from . import service
 from .deps import tarea_autorizada
 from .schemas import (AvanceIn, BloqueoIn, Estado, EstadoIn, PlanificacionIn, Prioridad, ReplanificarIn,
@@ -46,6 +47,18 @@ def tablero_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), u: dict 
 @router.get("/proyectos/{proyecto_id}/resumen")
 def resumen_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), db=Depends(get_db)):
     return service.resumen(db, proyecto)
+
+
+@router.get("/proyectos/{proyecto_id}/cierre")
+def revision_cierre(proyecto: dict = Depends(proyecto_autorizado), u: dict = Depends(usuario_actual),
+                    db=Depends(get_db)):
+    return service.revision_cierre(db, proyecto, u["id"])
+
+
+@router.post("/proyectos/{proyecto_id}/cierre")
+def cerrar_proyecto(data: CierreIn, proyecto: dict = Depends(proyecto_autorizado),
+                    u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.cerrar_proyecto(db, proyecto, u["id"], data.justificacion, data.revisadas)
 
 
 @router.get("/estado-proyectos")

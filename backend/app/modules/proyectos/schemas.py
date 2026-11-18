@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import Field
 
@@ -18,6 +18,15 @@ class ProyectoEditarIn(ProyectoIn):
     """HU-02-003: se envían todos los datos; solo se guardan los que cambian.
     HU-08-003: `anteriores` son los valores que se leyeron al abrir el formulario."""
     anteriores: Optional[ProyectoIn] = None
+
+
+EstadoProyecto = Literal["planificado", "en_curso", "cerrado"]
+
+
+class EstadoProyectoIn(Base):
+    """HU-02-004. `anterior` es el estado que se veía al pulsar (HU-08-003)."""
+    estado: EstadoProyecto
+    anterior: Optional[EstadoProyecto] = None
 
 
 class ParticipanteIn(Base):

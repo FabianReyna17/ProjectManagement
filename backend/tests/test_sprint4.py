@@ -505,3 +505,61 @@ def test_actividad_sin_acceso(esc):
     esc.c.delete(f"/api/proyectos/{esc.pid}/participantes/{esc.beto_id}", headers=esc.ana)
     assert esc.c.get(f"/api/tareas/{t['id']}/actividad", headers=esc.beto).status_code == 403
     assert esc.c.get(f"/api/archivos/{f['id']}/descarga", headers=esc.beto).status_code == 403
+
+
+# HU-02-004 Cambiar estado del proyecto
+def cambiar_estado_proyecto(e, h, estado, **extra):
+    return e.c.put(f"/api/proyectos/{e.pid}/estado", headers=h, json={"estado": estado, **extra})
+
+
+def ficha(e, h):
+    return e.c.get(f"/api/proyectos/{e.pid}", headers=h).json()
+
+
+def test_iniciar_proyecto_registra_actor_y_fecha(esc):
+    p = ficha(esc, esc.ana)
+    assert p["estado"] == "planificado" and p["transiciones"] == ["en_curso"] and p["estado_cambiado_en"] is None
+    assert ficha(esc, esc.beto)["transiciones"] == []  # solo el responsable lo cambia
+
+    r = cambiar_estado_proyecto(esc, esc.ana, "en_curso")
+    assert r.status_code == 200, r.text
+    p = ficha(esc, esc.beto)
+    assert p["estado"] == "en_curso" and p["estado_actor_nombre"] == "Ana" and p["estado_cambiado_en"]
+    assert [x["estado"] for x in esc.c.get("/api/proyectos", headers=esc.beto).json()] == ["en_curso"]
+    [cambio] = esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.beto).json()
+    assert (cambio["campo"], cambio["valor_anterior"], cambio["valor_nuevo"], cambio["actor_nombre"]) == (
+        "estado", "planificado", "en_curso", "Ana")
+
+
+def test_repetir_el_estado_no_duplica_el_historial(esc):
+    for _ in range(2):
+        assert cambiar_estado_proyecto(esc, esc.ana, "en_curso").status_code == 200
+    assert len(esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.ana).json()) == 1
+
+
+def test_transicion_invalida_conserva_el_estado(esc):
+    r = cambiar_estado_proyecto(esc, esc.ana, "cerrado")
+    assert r.status_code == 400 and "procedimiento" in r.json()["detail"]  # el cierre es HU-02-005
+    assert cambiar_estado_proyecto(esc, esc.ana, "archivado").status_code == 400  # estado inexistente
+    cambiar_estado_proyecto(esc, esc.ana, "en_curso")
+    assert cambiar_estado_proyecto(esc, esc.ana, "planificado").status_code == 400
+    assert ficha(esc, esc.ana)["estado"] == "en_curso"
+    assert len(esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.ana).json()) == 1
+
+
+def test_solo_el_responsable_cambia_el_estado(esc):
+    assert cambiar_estado_proyecto(esc, esc.beto, "en_curso").status_code == 403
+    assert cambiar_estado_proyecto(esc, esc.carla, "en_curso").status_code == 403
+    assert ficha(esc, esc.ana)["estado"] == "planificado"
+
+
+def test_estado_leido_desactualizado_da_conflicto(esc):
+    cambiar_estado_proyecto(esc, esc.ana, "en_curso")
+    r = cambiar_estado_proyecto(esc, esc.ana, "en_curso", anterior="planificado")
+    assert r.status_code == 200  # ya está en ese estado: nada que pisar
+    from app.db.database import get_engine
+    from sqlalchemy import text
+    with get_engine().begin() as conn:  # alguien lo devuelve a planificado por otra vía
+        conn.execute(text("UPDATE proyectos SET estado = 'planificado' WHERE id = :id"), {"id": esc.pid})
+    r = cambiar_estado_proyecto(esc, esc.ana, "en_curso", anterior="en_curso")
+    assert r.status_code == 409 and r.json()["vigente"] == {"estado": "planificado"}

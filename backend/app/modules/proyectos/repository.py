@@ -29,10 +29,17 @@ def obtener(db, proyecto_id: int) -> Optional[dict]:
     return uno(db, "SELECT * FROM proyectos WHERE id = :id", id=proyecto_id)
 
 
+# HU-02-004: quién y cuándo dejó el proyecto en su estado actual (NULL si nunca cambió)
+ULTIMO_ESTADO = """FROM historial_proyectos h JOIN usuarios a ON a.id = h.actor_id
+                   WHERE h.proyecto_id = p.id AND h.campo = 'estado' ORDER BY h.id DESC LIMIT 1"""
+
+
 def obtener_con_responsable(db, proyecto_id: int) -> Optional[dict]:
-    return uno(db, """SELECT p.*, r.nombre AS responsable_nombre
-                       FROM proyectos p JOIN usuarios r ON r.id = p.responsable_id
-                       WHERE p.id = :id""", id=proyecto_id)
+    return uno(db, f"""SELECT p.*, r.nombre AS responsable_nombre,
+                               (SELECT a.nombre {ULTIMO_ESTADO}) AS estado_actor_nombre,
+                               (SELECT h.creado_en {ULTIMO_ESTADO}) AS estado_cambiado_en
+                        FROM proyectos p JOIN usuarios r ON r.id = p.responsable_id
+                        WHERE p.id = :id""", id=proyecto_id)
 
 
 CAMPOS_EDITABLES = ("nombre", "objetivo", "responsable_id", "fecha_inicio", "fecha_fin")
@@ -43,6 +50,13 @@ def actualizar_si_vigente(db, proyecto_id: int, campo: str, leido, nuevo) -> boo
     assert campo in CAMPOS_EDITABLES
     cur = db.execute(text(f"UPDATE proyectos SET {campo} = :nuevo WHERE id = :id AND {campo} IS :leido"),
                      {"nuevo": nuevo, "leido": leido, "id": proyecto_id})
+    return cur.rowcount > 0
+
+
+def actualizar_estado(db, proyecto_id: int, actual: str, estado: str) -> bool:
+    """Cambia el estado solo si sigue siendo `actual` (False si otra persona lo cambió)."""
+    cur = db.execute(text("UPDATE proyectos SET estado = :e WHERE id = :id AND estado = :actual"),
+                     {"e": estado, "actual": actual, "id": proyecto_id})
     return cur.rowcount > 0
 
 

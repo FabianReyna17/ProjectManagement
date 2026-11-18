@@ -462,10 +462,13 @@ async function vistaProyecto(id) {
           <p class="subtitulo">
             Responsable: ${escapar(p.responsable_nombre)} ·
             <span class="num">${fecha(p.fecha_inicio)} – ${fecha(p.fecha_fin)}</span>
+            ${p.estado_cambiado_en ? ` · ${escapar(ESTADOS_PROYECTO[p.estado])} desde ${momento(p.estado_cambiado_en)}, por ${escapar(p.estado_actor_nombre)}` : ""}
           </p>
         </div>
         <div class="encabezado-acciones">
           ${botonCopiarEnlace(`#/proyectos/${p.id}`)}
+          ${p.transiciones.includes("en_curso") ? `<button type="button" class="boton secundario" data-accion="iniciar-proyecto"
+              data-id="${Number(p.id)}" data-estado="${escapar(p.estado)}">${icono("est-en_curso")}Iniciar ejecución</button>` : ""}
           ${p.soy_responsable ? `<a class="boton secundario" href="#/proyectos/${p.id}/editar">Editar proyecto</a>` : ""}
           ${p.soy_responsable ? `<a class="boton" href="${nuevaTarea}">${icono("mas")}Nueva tarea</a>` : ""}
         </div>
@@ -554,13 +557,28 @@ async function vistaProyecto(id) {
   };
 }
 
+// HU-02-004 Cambiar estado del proyecto: planificado → en curso (el cierre tiene su propio procedimiento)
+ACCIONES["iniciar-proyecto"] = async (btn) => {
+  const si = await confirmar({
+    titulo: "¿Iniciar la ejecución del proyecto?",
+    mensaje: "El proyecto pasará de «Planificado» a «En curso». Quedará registrado quién lo cambió y cuándo.",
+    aceptar: "Iniciar ejecución",
+  });
+  if (!si) return;
+  const ok = await guardar(btn, () => API.put(`/api/proyectos/${btn.dataset.id}/estado`,
+    { estado: "en_curso", anterior: btn.dataset.estado }), "Proyecto en curso");
+  if (ok) { cargarProyectos(); recargar(); }
+  else recargar();  // 409/400: muestra el estado vigente
+};
+
 // HU-02-003: un cambio del plan con valor anterior, nuevo, actor y fecha
 const CAMPOS_PROYECTO = { nombre: "Nombre", objetivo: "Objetivo", responsable_id: "Responsable",
-                          fecha_inicio: "Fecha de inicio", fecha_fin: "Fecha de fin" };
+                          fecha_inicio: "Fecha de inicio", fecha_fin: "Fecha de fin", estado: "Estado" };
 
 function valorCambioProyecto(h, cual) {
   if (h.campo === "responsable_id") return escapar(h[`${cual}_nombre`]);
   const valor = h[`valor_${cual}`];
+  if (h.campo === "estado") return escapar(ESTADOS_PROYECTO[valor] || valor);  // HU-02-004
   return h.campo.startsWith("fecha_") ? fecha(valor) : escapar(valor);
 }
 

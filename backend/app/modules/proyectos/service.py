@@ -1,4 +1,4 @@
-"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001, HU-02-002, HU-02-003, HU-08-002, HU-08-003).
+"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001 a HU-02-004, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para datos de cuentas usa el servicio de acceso, nunca su repositorio.
 """
@@ -89,6 +89,42 @@ def actualizar(db, proyecto: dict, actor_id: int, nombre: str, objetivo: str, re
     return ficha(repo.obtener_con_responsable(db, proyecto["id"]), actor_id)
 
 
+NOMBRE_ESTADO = {"planificado": "Planificado", "en_curso": "En curso", "cerrado": "Cerrado"}
+# HU-02-004: por ahora solo se inicia la ejecución. El cierre tiene su propio procedimiento
+# (HU-02-005: revisar tareas abiertas), así que no se acepta como un cambio de estado simple.
+TRANSICIONES = {"planificado": {"en_curso"}, "en_curso": set(), "cerrado": set()}
+MSG_CIERRE = "El proyecto se cierra con su propio procedimiento, que revisa las tareas abiertas"
+
+
+def _transiciones(proyecto: dict) -> list:
+    return sorted(TRANSICIONES[proyecto["estado"]])
+
+
+def _conflicto_estado(actual: str) -> Conflicto:
+    return Conflicto(f"Otra persona cambió el estado del proyecto a «{NOMBRE_ESTADO[actual]}» mientras lo "
+                     "revisabas. Tu cambio no se guardó", {"campos": ["estado"], "vigente": {"estado": actual}})
+
+
+def cambiar_estado(db, proyecto: dict, actor_id: int, estado: str, leido: Optional[str] = None) -> dict:
+    """HU-02-004: solo el responsable y solo transiciones permitidas. El cambio queda en el
+    historial (anterior, nuevo, actor y fecha). Repetir el estado actual no hace nada; si algo
+    no es válido el estado anterior se conserva. HU-08-003: si el estado ya no es el leído → 409."""
+    exigir_responsable(proyecto, actor_id)
+    actual = proyecto["estado"]
+    if estado != actual:
+        if leido is not None and leido != actual:
+            raise _conflicto_estado(actual)
+        if estado == "cerrado":
+            raise DatosInvalidos(MSG_CIERRE)
+        if estado not in TRANSICIONES[actual]:
+            raise DatosInvalidos(f"No se puede pasar el proyecto de «{NOMBRE_ESTADO[actual]}» a «{NOMBRE_ESTADO[estado]}»")
+        with transaccion(db):
+            if not repo.actualizar_estado(db, proyecto["id"], actual, estado):
+                raise _conflicto_estado(repo.obtener(db, proyecto["id"])["estado"])
+            repo.registrar_cambio(db, proyecto["id"], "estado", actual, estado, actor_id)
+    return ficha(repo.obtener_con_responsable(db, proyecto["id"]), actor_id)
+
+
 def historial(db, proyecto: dict) -> list:
     return repo.listar_historial(db, proyecto["id"])
 
@@ -98,7 +134,9 @@ def es_participante(db, proyecto_id: int, usuario_id: int) -> bool:
 
 
 def ficha(proyecto: dict, usuario_id: int) -> dict:
-    return {**proyecto, "soy_responsable": proyecto["responsable_id"] == usuario_id}
+    soy_responsable = proyecto["responsable_id"] == usuario_id
+    return {**proyecto, "soy_responsable": soy_responsable,
+            "transiciones": _transiciones(proyecto) if soy_responsable else []}
 
 
 def listar_participantes(db, proyecto: dict) -> list:

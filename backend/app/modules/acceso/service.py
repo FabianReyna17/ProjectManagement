@@ -1,9 +1,10 @@
-"""Reglas de cuentas, funciones y sesiones (HU-01-001 a HU-01-004, HU-01-008 y HU-01-009).
+"""Reglas de cuentas, funciones y sesiones (HU-01-001 a HU-01-004, HU-01-008, HU-01-009 y HU-01-011).
 
 No importa FastAPI: se puede probar sin peticiones HTTP. Abre y cierra la
 transacción; los repositorios no hacen commit.
 """
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -17,6 +18,7 @@ from . import repository as repo
 MSG_LOGIN = "Usuario o contraseña incorrectos"
 MSG_SESION = "Tu sesión ya no es válida. Vuelve a iniciar sesión"
 MSG_EXPIRADA = "Tu sesión expiró por inactividad. Vuelve a iniciar sesión"
+MSG_CAMBIO = "Debes cambiar tu contraseña temporal antes de continuar"
 FUNCIONES_RESPONSABLE = ("Admin", "Responsable")
 
 # La sesión expira tras este tiempo sin peticiones (por defecto, una jornada de 8 h)
@@ -24,6 +26,16 @@ INACTIVIDAD = timedelta(minutes=int(os.getenv("SESION_INACTIVIDAD_MIN", "480")))
 TOQUE = timedelta(minutes=1)  # ultimo_uso se actualiza como mucho una vez por minuto
 
 INTENTOS = Intentos()
+LARGO_TEMPORAL = 12
+ALFABETO_TEMPORAL = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sin 0/O ni 1/l/I
+
+
+class CambioPendiente(Prohibido):
+    """HU-01-011: la cuenta entró con una contraseña temporal y aún no la cambia (403)."""
+
+    def __init__(self):
+        super().__init__(MSG_CAMBIO)
+        self.datos = {"cambiar_password": True}
 # Se verifica contra este hash cuando la cuenta no existe: el tiempo de respuesta no la delata
 HASH_FICTICIO = hash_password(nuevo_token())
 
@@ -52,7 +64,14 @@ def sesion_vigente(db, token: str) -> dict:
         with transaccion(db):
             repo.tocar_sesion(db, token, _texto(ahora))
     datos = {k: row[k] for k in ("id", "usuario", "nombre", "activo", "funcion")}
-    return {**datos, "token": token}
+    return {**datos, "debe_cambiar_password": bool(row["debe_cambiar_password"]), "token": token}
+
+
+def exigir_sin_cambio_pendiente(u: dict) -> dict:
+    """Con contraseña temporal solo se permite ver la cuenta, cambiar la contraseña y salir."""
+    if u["debe_cambiar_password"]:
+        raise CambioPendiente()
+    return u
 
 
 def usuario_por_token(db, token: str) -> Optional[dict]:
@@ -82,13 +101,26 @@ def iniciar_sesion(db, usuario: str, password: str) -> dict:
         repo.crear_sesion(db, token, row["id"], _texto(ahora))
     return {
         "token": token,
-        "usuario": {"id": row["id"], "usuario": row["usuario"], "nombre": row["nombre"], "funcion": row["funcion"]},
+        "usuario": {"id": row["id"], "usuario": row["usuario"], "nombre": row["nombre"], "funcion": row["funcion"],
+                    "debe_cambiar_password": bool(row["debe_cambiar_password"])},
     }
 
 
 def cerrar_sesion(db, token: str) -> None:
     with transaccion(db):
         repo.borrar_sesion(db, token)
+
+
+def cambiar_password(db, u: dict, actual: str, nueva: str) -> None:
+    """La persona cambia su contraseña (obligatorio tras un restablecimiento, HU-01-011).
+    Las demás sesiones de la cuenta se cierran; la actual sigue."""
+    if not verificar_password(actual, repo.hash_de(db, u["id"]) or HASH_FICTICIO):
+        raise DatosInvalidos("La contraseña actual no es correcta")
+    if nueva == actual:
+        raise DatosInvalidos("La nueva contraseña debe ser distinta de la actual")
+    with transaccion(db):
+        repo.poner_password(db, u["id"], hash_password(nueva), temporal=False)
+        repo.borrar_otras_sesiones(db, u["id"], u["token"])
 
 
 def listar_funciones(db) -> list:
@@ -159,6 +191,26 @@ def cambiar_funcion(db, usuario_id: int, funcion_id: int, actor_id: int) -> dict
         if repo.cambiar_funcion(db, usuario_id, funcion_id):
             repo.registrar_evento(db, usuario_id, "funcion", cuenta["funcion"], nueva, actor_id, _texto(_ahora()))
     return _cuenta(repo.obtener_cuenta(db, usuario_id))
+
+
+def restablecer_acceso(db, usuario_id: int, actor_id: int) -> dict:
+    """HU-01-011. El Admin genera una contraseña temporal para una cuenta activa: la anterior y
+    las sesiones abiertas dejan de servir, y al entrar la persona debe cambiarla. No toca su
+    función, sus proyectos ni su autoría. La temporal se devuelve una sola vez y no se registra."""
+    if usuario_id == actor_id:
+        raise DatosInvalidos("Para tu propia cuenta usa «Cambiar contraseña»")
+    cuenta = repo.obtener_cuenta(db, usuario_id)
+    if not cuenta:
+        raise NoEncontrado("La cuenta no existe")
+    if not cuenta["activo"]:
+        raise Conflicto("La cuenta está desactivada: no se puede restablecer su acceso")
+    temporal = "".join(secrets.choice(ALFABETO_TEMPORAL) for _ in range(LARGO_TEMPORAL))
+    with transaccion(db):
+        repo.poner_password(db, usuario_id, hash_password(temporal), temporal=True)
+        repo.borrar_sesiones_de(db, usuario_id)
+        repo.registrar_evento(db, usuario_id, "restablecimiento", None, None, actor_id, _texto(_ahora()))
+    INTENTOS.exito(cuenta["usuario"].casefold())  # el freno de intentos no le impide entrar con la nueva
+    return {**_cuenta(repo.obtener_cuenta(db, usuario_id)), "password_temporal": temporal}
 
 
 # --- Consultas que usan otros módulos (nunca acceden a este repositorio directamente) ---

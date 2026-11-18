@@ -17,3 +17,8 @@ class UsuarioIn(Base):
 
 class FuncionIn(Base):
     funcion_id: int
+
+
+class PasswordIn(Base):
+    actual: str = Field(min_length=1)
+    nueva: str = Field(min_length=6, max_length=100)

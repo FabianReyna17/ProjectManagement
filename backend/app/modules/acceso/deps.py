@@ -13,10 +13,16 @@ from ...db.database import get_db
 from . import service
 
 
-def usuario_actual(authorization: Optional[str] = Header(None), db=Depends(get_db)) -> dict:
+def sesion_actual(authorization: Optional[str] = Header(None), db=Depends(get_db)) -> dict:
+    """Sesión válida, aunque tenga pendiente cambiar la contraseña temporal (HU-01-011):
+    solo para ver la cuenta, cambiar la contraseña y salir."""
     if not authorization or not authorization.startswith("Bearer "):
         raise NoAutenticado(service.MSG_SESION)
     return service.sesion_vigente(db, authorization[7:])
+
+
+def usuario_actual(u: dict = Depends(sesion_actual)) -> dict:
+    return service.exigir_sin_cambio_pendiente(u)
 
 
 def requiere_funcion(*funciones: str):

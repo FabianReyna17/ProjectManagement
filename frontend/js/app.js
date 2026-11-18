@@ -20,7 +20,13 @@ const rutas = [
   { patron: /^#\/carga(?:\?proyecto=(\d+))?$/, vista: vistaCarga, esqueleto: "tabla" },
   { patron: /^#\/usuarios$/, vista: vistaUsuarios, esqueleto: "tabla" },
   { patron: /^#\/sin-acceso$/, vista: vistaSinAcceso },
+  { patron: /^#\/cambiar-contrasena$/, vista: vistaCambiarContrasena, aislada: true, esqueleto: "form" },
 ];
+
+/** HU-01-011: entró con contraseña temporal; hasta cambiarla solo ve esa pantalla. */
+function cambioPendiente() {
+  return Boolean(API.token() && API.usuario()?.debe_cambiar_password);
+}
 
 /** La vista no se puede consultar: el router muestra "Sin acceso" en su lugar (HU-01-007). */
 function sinAcceso() {
@@ -40,8 +46,12 @@ async function router({ recarga = false } = {}) {
     location.replace("#/login");
     return;
   }
+  if (!ruta.publica && !ruta.aislada && cambioPendiente()) {
+    location.replace("#/cambiar-contrasena");
+    return;
+  }
   const id = ++navegacion;
-  document.body.classList.toggle("sin-sesion", Boolean(ruta.publica));
+  document.body.classList.toggle("sin-sesion", Boolean(ruta.publica || (ruta.aislada && cambioPendiente())));
   // Esqueleto solo si la carga tarda: evita parpadeos en respuestas rápidas
   const espera = recarga ? 0 : setTimeout(() => {
     if (id === navegacion) app.innerHTML = esqueleto(ruta.esqueleto);
@@ -60,7 +70,7 @@ async function router({ recarga = false } = {}) {
   // Si la persona ya navegó a otra parte, esta respuesta llegó tarde y no se pinta
   if (id !== navegacion || !vista) return;
   pintar(vista, recarga);
-  if (!ruta.publica && ruta.vista !== vistaAvisos) ContadorAvisos.actualizar();  // la de avisos ya lo pinta
+  if (!ruta.publica && !cambioPendiente() && ruta.vista !== vistaAvisos) ContadorAvisos.actualizar();  // la de avisos ya lo pinta
 }
 
 /** Vuelve a consultar la vista actual sin cambiar de ruta (tras guardar, con datos del servidor). */
@@ -149,6 +159,7 @@ function pintarMenusCuenta() {
       <div class="menu-cuenta-panel">
         <button type="button" data-accion="tema">${icono("tema")}Tema: ${escapar(NOMBRES_TEMA[Tema.actual()])}</button>
         <button type="button" data-accion="atajos">${icono("teclado")}Atajos de teclado</button>
+        <a href="#/cambiar-contrasena">${icono("bloqueo")}Cambiar contraseña</a>
         <button type="button" data-accion="salir">${icono("salir")}Cerrar sesión</button>
       </div>
     </details>` : "";
@@ -181,7 +192,7 @@ function pintarRecientes() {
 }
 
 async function cargarProyectos() {
-  if (!API.token()) return;
+  if (!API.token() || cambioPendiente()) return;
   try {
     Estado.proyectos = await API.get("/api/proyectos");
     pintarRecientes();
@@ -209,7 +220,7 @@ ACCIONES.saltar = () => (app.querySelector("h1") || app).focus();
 
 document.addEventListener("click", (e) => {
   document.querySelectorAll("details.menu-cuenta[open]").forEach((d) => {
-    if (!d.contains(e.target) || e.target.closest("[data-accion]")) d.open = false;
+    if (!d.contains(e.target) || e.target.closest("[data-accion], a")) d.open = false;
   });
   const el = e.target.closest("[data-accion]");
   if (el && ACCIONES[el.dataset.accion]) {
@@ -308,7 +319,8 @@ function vistaLogin() {
           avisoLogin = null;
           pintarMenusCuenta();
           cargarProyectos();
-          location.hash = rutaTrasLogin();
+          // HU-01-011: con contraseña temporal primero hay que cambiarla (la ruta se conserva para después)
+          location.hash = cambioPendiente() ? "#/cambiar-contrasena" : rutaTrasLogin();
         } catch (err) {
           error.innerHTML = `${icono("error")}${escapar(err.message)}`;
           error.hidden = false;
@@ -860,6 +872,7 @@ async function vistaUsuarios() {
             <h2 class="titulo-seccion" id="titulo-cuentas">Cuentas</h2>
             ${buscadorTabla("tabla-usuarios", "Buscar cuenta")}
           </div>
+          <div id="credencial-temporal" class="credencial" role="status" hidden></div>
           <div class="tabla-marco">
             <table class="tabla tabla-tarjetas" id="tabla-usuarios">
               <thead><tr>${th("Nombre", { clase: "col-principal" })}${th("Usuario")}${th("Función")}${th("Estado")}${th("Acciones", { ordenable: false })}</tr></thead>
@@ -877,8 +890,11 @@ async function vistaUsuarios() {
                     <td data-label="Estado" data-orden="${x.activo ? 0 : 1}">${x.activo ? "Activa" : `${etiquetaCuentaDesactivada()}
                       <small class="tenue">${momento(x.desactivado_en)} · ${escapar(x.desactivado_por_nombre || "")}</small>`}</td>
                     <td data-label="Acciones">${x.activo && x.id !== yo
-                      ? `<button type="button" class="boton chico peligro-suave" data-accion="desactivar-cuenta"
-                           data-id="${Number(x.id)}" data-nombre="${escapar(x.nombre)}">Desactivar</button>`
+                      ? `<span class="acciones-fila">
+                           <button type="button" class="boton chico secundario" data-accion="restablecer-acceso"
+                             data-id="${Number(x.id)}" data-nombre="${escapar(x.nombre)}">Restablecer acceso</button>
+                           <button type="button" class="boton chico peligro-suave" data-accion="desactivar-cuenta"
+                             data-id="${Number(x.id)}" data-nombre="${escapar(x.nombre)}">Desactivar</button></span>`
                       : x.id === yo ? `<span class="tenue">Tu cuenta</span>` : ""}</td>
                   </tr>`).join("")}
               </tbody>
@@ -932,6 +948,31 @@ async function vistaUsuarios() {
   };
 }
 
+// HU-01-011 Restablecer acceso: la contraseña temporal se muestra una sola vez para entregarla
+ACCIONES["restablecer-acceso"] = async (btn) => {
+  const si = await confirmar({
+    titulo: `¿Restablecer el acceso de ${btn.dataset.nombre}?`,
+    mensaje: "Verifica antes su identidad. Se generará una contraseña temporal: la actual y sus sesiones abiertas " +
+      "dejarán de servir y al entrar deberá elegir una nueva. Su función, proyectos y trabajo no cambian.",
+    aceptar: "Restablecer acceso", peligro: true,
+  });
+  if (!si) return;
+  const r = await guardar(btn, () => API.post(`/api/usuarios/${btn.dataset.id}/restablecimiento`), "Acceso restablecido");
+  if (!r) return;
+  const panel = document.getElementById("credencial-temporal");
+  panel.innerHTML = `
+    <p><strong>Contraseña temporal de ${escapar(r.nombre)}</strong> (usuario <code>${escapar(r.usuario)}</code>)</p>
+    <p class="credencial-valor"><code>${escapar(r.password_temporal)}</code>
+      <button type="button" class="boton chico secundario" data-copiar="${escapar(r.password_temporal)}">Copiar</button></p>
+    <p class="tenue">Entrégala en persona o por un canal seguro. No se volverá a mostrar.</p>`;
+  panel.hidden = false;
+  panel.querySelector("[data-copiar]").addEventListener("click", async (e) => {
+    try { await navigator.clipboard.writeText(e.currentTarget.dataset.copiar); toast("Copiada", "ok"); }
+    catch { toast("No se pudo copiar; selecciónala y cópiala a mano", "error"); }
+  });
+  panel.scrollIntoView({ block: "nearest" });
+};
+
 // HU-01-009 Desactivar cuenta, con confirmación. Repetirla no cambia nada (el servidor lo garantiza).
 ACCIONES["desactivar-cuenta"] = async (btn) => {
   const si = await confirmar({
@@ -944,6 +985,56 @@ ACCIONES["desactivar-cuenta"] = async (btn) => {
   const ok = await guardar(btn, () => API.post(`/api/usuarios/${btn.dataset.id}/desactivacion`), "Cuenta desactivada");
   if (ok) recargar();
 };
+
+// HU-01-011 Cambiar contraseña: obligatorio tras un restablecimiento; también desde el menú de la cuenta
+function vistaCambiarContrasena() {
+  const obligatorio = cambioPendiente();
+  return {
+    titulo: "Cambiar contraseña",
+    foco: "campo",
+    html: `
+      <div class="acceso">
+        ${obligatorio ? `<p class="acceso-marca">${NOMBRE_APP}</p>` : ""}
+        <h1 tabindex="-1">Cambiar contraseña</h1>
+        ${obligatorio ? `<p class="nota" role="status">${icono("aviso")}Entraste con una contraseña temporal.
+          Elige una nueva para continuar; la temporal dejará de servir.</p>` : ""}
+        <form id="f-password" class="formulario" ${obligatorio ? `data-sin-aviso-cambios="1"` : ""}>
+          <label>${obligatorio ? "Contraseña temporal" : "Contraseña actual"}
+            <input name="actual" type="password" required autocomplete="current-password"></label>
+          <label>Nueva contraseña <span class="opcional">mínimo 6 caracteres</span>
+            <input name="nueva" type="password" required minlength="6" maxlength="100" autocomplete="new-password"></label>
+          <label>Repite la nueva contraseña
+            <input name="repetida" type="password" required minlength="6" maxlength="100" autocomplete="new-password"></label>
+          <div class="acciones-form">
+            <button class="boton">Guardar contraseña</button>
+            ${obligatorio ? `<button type="button" class="boton secundario" data-accion="salir">Cerrar sesión</button>`
+              : `<a class="boton secundario" href="#/proyectos">Cancelar</a>`}
+          </div>
+        </form>
+      </div>`,
+    montar() {
+      const form = document.getElementById("f-password");
+      const repetida = form.elements.repetida;
+      repetida.addEventListener("input", () => repetida.setCustomValidity(""));
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const d = datosForm(form);
+        if (d.nueva !== d.repetida) {
+          repetida.setCustomValidity("Las contraseñas no coinciden");
+          repetida.reportValidity();
+          return;
+        }
+        const ok = await guardar(form.querySelector("button.boton"),
+          () => API.post("/api/auth/password", { actual: d.actual, nueva: d.nueva }), "Contraseña actualizada", { form });
+        if (!ok) return;
+        await API.refrescarUsuario();
+        pintarMenusCuenta();
+        cargarProyectos();
+        location.hash = obligatorio ? rutaTrasLogin() : "#/proyectos";
+      });
+    },
+  };
+}
 
 // HU-01-007 Pantalla de "sin acceso" (misma para recursos ajenos e inexistentes)
 function vistaSinAcceso() {

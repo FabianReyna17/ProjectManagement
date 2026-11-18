@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends
 from ...core.cabeceras import clave_idempotencia
 from ...db.database import get_db
 from . import service
-from .deps import requiere_funcion, usuario_actual
-from .schemas import FuncionIn, LoginIn, UsuarioIn
+from .deps import requiere_funcion, sesion_actual
+from .schemas import FuncionIn, LoginIn, PasswordIn, UsuarioIn
 
 router = APIRouter(prefix="/api")
 
@@ -18,14 +18,21 @@ def login(data: LoginIn, db=Depends(get_db)):
 
 
 @router.post("/auth/logout", tags=["auth"])
-def logout(u: dict = Depends(usuario_actual), db=Depends(get_db)):
+def logout(u: dict = Depends(sesion_actual), db=Depends(get_db)):
     service.cerrar_sesion(db, u["token"])
     return {"mensaje": "Sesión cerrada"}
 
 
 @router.get("/auth/me", tags=["auth"])
-def me(u: dict = Depends(usuario_actual)):
-    return {k: u[k] for k in ("id", "usuario", "nombre", "funcion")}
+def me(u: dict = Depends(sesion_actual)):
+    return {k: u[k] for k in ("id", "usuario", "nombre", "funcion", "debe_cambiar_password")}
+
+
+@router.post("/auth/password", tags=["auth"])
+def cambiar_password(data: PasswordIn, u: dict = Depends(sesion_actual), db=Depends(get_db)):
+    """Cambiar la propia contraseña; obligatorio tras un restablecimiento (HU-01-011)."""
+    service.cambiar_password(db, u, data.actual, data.nueva)
+    return {"mensaje": "Contraseña actualizada"}
 
 
 # --- Cuentas y funciones (HU-01-001, HU-01-002) ---
@@ -48,7 +55,7 @@ def registrar_usuario(data: UsuarioIn, u: dict = Depends(requiere_funcion("Admin
     return service.registrar_usuario(db, data.usuario, data.nombre, data.password, data.funcion_id, u["id"], clave)
 
 
-# --- Mantenimiento de cuentas (HU-01-008, HU-01-009) ---
+# --- Mantenimiento de cuentas (HU-01-008, HU-01-009, HU-01-011) ---
 
 @router.post("/usuarios/{usuario_id}/desactivacion", tags=["usuarios"])
 def desactivar_cuenta(usuario_id: int, u: dict = Depends(requiere_funcion("Admin")), db=Depends(get_db)):
@@ -59,3 +66,8 @@ def desactivar_cuenta(usuario_id: int, u: dict = Depends(requiere_funcion("Admin
 def cambiar_funcion(usuario_id: int, data: FuncionIn, u: dict = Depends(requiere_funcion("Admin")),
                     db=Depends(get_db)):
     return service.cambiar_funcion(db, usuario_id, data.funcion_id, u["id"])
+
+
+@router.post("/usuarios/{usuario_id}/restablecimiento", tags=["usuarios"])
+def restablecer_acceso(usuario_id: int, u: dict = Depends(requiere_funcion("Admin")), db=Depends(get_db)):
+    return service.restablecer_acceso(db, usuario_id, u["id"])

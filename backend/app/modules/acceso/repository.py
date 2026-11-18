@@ -13,6 +13,7 @@ class UsuarioDuplicado(Exception):
 
 def buscar_por_token(db, token: str) -> Optional[dict]:
     return uno(db, """SELECT u.id, u.usuario, u.nombre, u.activo, f.nombre AS funcion,
+                              u.debe_cambiar_password,
                               COALESCE(s.ultimo_uso, s.creado_en) AS ultimo_uso
                        FROM sesiones s
                        JOIN usuarios u  ON u.id = s.usuario_id
@@ -21,9 +22,24 @@ def buscar_por_token(db, token: str) -> Optional[dict]:
 
 
 def buscar_por_usuario(db, usuario: str) -> Optional[dict]:
-    return uno(db, """SELECT u.id, u.usuario, u.nombre, u.password_hash, u.activo, f.nombre AS funcion
+    return uno(db, """SELECT u.id, u.usuario, u.nombre, u.password_hash, u.activo, f.nombre AS funcion,
+                              u.debe_cambiar_password
                        FROM usuarios u JOIN funciones f ON f.id = u.funcion_id
                        WHERE u.usuario = :usuario""", usuario=usuario)
+
+
+def hash_de(db, usuario_id: int) -> Optional[str]:
+    row = uno(db, "SELECT password_hash FROM usuarios WHERE id = :id", id=usuario_id)
+    return row["password_hash"] if row else None
+
+
+def poner_password(db, usuario_id: int, password_hash: str, temporal: bool) -> None:
+    db.execute(text("UPDATE usuarios SET password_hash = :h, debe_cambiar_password = :t WHERE id = :id"),
+               {"id": usuario_id, "h": password_hash, "t": int(temporal)})
+
+
+def borrar_otras_sesiones(db, usuario_id: int, token: str) -> None:
+    db.execute(text("DELETE FROM sesiones WHERE usuario_id = :u AND token <> :t"), {"u": usuario_id, "t": token})
 
 
 def crear_sesion(db, token: str, usuario_id: int, ahora: str) -> None:

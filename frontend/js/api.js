@@ -70,6 +70,11 @@ const API = {
     const data = await res.json().catch(() => ({}));
 
     if (res.status === 401 && !url.endsWith("/auth/login")) this.sesionPerdida(data.detail);
+    // HU-01-011: entró con contraseña temporal; hasta cambiarla solo puede ir a esa pantalla
+    if (res.status === 403 && data.cambiar_password) {
+      this.guardarUsuario({ ...this.usuario(), debe_cambiar_password: true });
+      location.hash = "#/cambiar-contrasena";
+    }
     // El 403 no redirige aquí: el router muestra "Sin acceso" si falla una consulta y
     // guardar() muestra el motivo si falla una acción, sin sacar a la persona de la vista.
     if (!res.ok) throw new ErrorApi(data.detail || `Error ${res.status}`, res.status, camposConError(data.detail), data);

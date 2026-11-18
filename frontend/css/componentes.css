@@ -89,6 +89,11 @@
 .chip-desactivada { color: var(--texto-2); background: var(--superficie-2); }
 .chip-desactivada .icono { width: 14px; height: 14px; vertical-align: 0; }
 .fila-inactiva .celda-principal { color: var(--texto-2); }
+.acciones-fila { display: inline-flex; flex-wrap: wrap; gap: var(--e-2); }
+.credencial { display: grid; gap: var(--e-2); margin-bottom: var(--e-3); padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--aviso-borde); border-radius: var(--r-2); background: var(--aviso-suave); }
+.credencial-valor { display: flex; flex-wrap: wrap; align-items: center; gap: var(--e-3); }
+.credencial-valor code { font-size: var(--t-lg); letter-spacing: .05em; user-select: all; }
 .select-chico { width: auto; min-width: 140px; padding-block: 4px; font-size: var(--t-sm); }
 
 .chip-vencida { border-color: var(--peligro-borde); background: var(--peligro-suave); color: var(--peligro); }
@@ -466,7 +471,7 @@ body:not(.sin-sesion) .pila-avisos { bottom: calc(var(--alto-nav-inferior) + var
   background: var(--superficie);
   box-shadow: var(--sombra-capa);
 }
-.menu-cuenta-panel button {
+.menu-cuenta-panel :is(button, a) {
   display: flex;
   align-items: center;
   gap: var(--e-2);
@@ -478,9 +483,10 @@ body:not(.sin-sesion) .pila-avisos { bottom: calc(var(--alto-nav-inferior) + var
   color: var(--texto);
   font: inherit;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
-.menu-cuenta-panel button:hover { background: var(--superficie-2); }
+.menu-cuenta-panel :is(button, a):hover { background: var(--superficie-2); }
 .menu-cuenta-panel .icono { color: var(--texto-2); }
 
 .barra-movil .menu-cuenta-nombre { display: none; }

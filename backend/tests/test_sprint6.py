@@ -123,3 +123,69 @@ def test_solo_admin_cambia_funciones_y_nadie_la_propia(esc):
     assert cambiar_funcion(esc, esc.carla_id, "Admin").status_code == 409  # cuenta desactivada
     assert eventos_cuenta(esc.beto_id) == []
     assert esc.c.get("/api/auth/me", headers=esc.beto).json()["funcion"] == "Integrante"
+
+
+# HU-01-011 Restablecer acceso
+def restablecer(e, uid, h=None):
+    return e.c.post(f"/api/usuarios/{uid}/restablecimiento", headers=h or e.adm)
+
+
+def entrar(e, usuario, password):
+    return e.c.post("/api/auth/login", json={"usuario": usuario, "password": password})
+
+
+def test_restablecer_invalida_la_credencial_anterior_y_obliga_a_cambiarla(esc):
+    r = restablecer(esc, esc.beto_id)
+    assert r.status_code == 200, r.text
+    temporal = r.json()["password_temporal"]
+    assert len(temporal) == 12 and r.json()["activo"] is True
+    assert esc.c.get("/api/proyectos", headers=esc.beto).status_code == 401  # su sesión abierta ya no sirve
+    assert entrar(esc, "beto", "clave123").status_code == 401                 # ni la contraseña anterior
+    r = entrar(esc, "beto", temporal)
+    assert r.status_code == 200 and r.json()["usuario"]["debe_cambiar_password"] is True
+    h = {"Authorization": f"Bearer {r.json()['token']}"}
+    # con la temporal solo puede ver su cuenta, cambiarla o salir
+    r = esc.c.get("/api/proyectos", headers=h)
+    assert (r.status_code, r.json()["cambiar_password"]) == (403, True)
+    assert esc.c.get("/api/auth/me", headers=h).json()["debe_cambiar_password"] is True
+    cambio = {"actual": temporal, "nueva": "nueva123"}
+    assert esc.c.post("/api/auth/password", headers=h, json={**cambio, "nueva": temporal}).status_code == 400
+    assert esc.c.post("/api/auth/password", headers=h, json={**cambio, "actual": "otra"}).status_code == 400
+    assert esc.c.post("/api/auth/password", headers=h, json=cambio).status_code == 200
+    assert esc.c.get("/api/proyectos", headers=h).status_code == 200  # la misma sesión sigue
+    assert entrar(esc, "beto", temporal).status_code == 401           # la temporal ya no sirve
+    assert entrar(esc, "beto", "nueva123").json()["usuario"]["debe_cambiar_password"] is False
+
+
+def test_conserva_permisos_y_autoria_y_registra_quien_lo_inicio(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    esc.c.post(f"/api/proyectos/{esc.pid}/comentarios", headers=esc.beto, json={"texto": "Listo"})
+    temporal = restablecer(esc, esc.beto_id).json()["password_temporal"]
+    h = {"Authorization": f"Bearer {entrar(esc, 'beto', temporal).json()['token']}"}
+    esc.c.post("/api/auth/password", headers=h, json={"actual": temporal, "nueva": "nueva123"})
+    assert esc.c.get("/api/auth/me", headers=h).json()["funcion"] == "Integrante"
+    assert [p["id"] for p in esc.c.get("/api/proyectos", headers=h).json()] == [esc.pid]
+    assert esc.c.put(f"/api/tareas/{t['id']}/estado", headers=h, json={"estado": "en_curso"}).status_code == 200
+    [com] = esc.c.get(f"/api/proyectos/{esc.pid}/comentarios", headers=h).json()
+    assert (com["autor_nombre"], com["autor_id"]) == ("Beto", esc.beto_id)
+    assert eventos_cuenta(esc.beto_id) == [
+        {"tipo": "restablecimiento", "valor_anterior": None, "valor_nuevo": None, "actor_id": 1}]
+
+
+def test_solo_un_admin_restablece_una_cuenta_existente_y_activa(esc):
+    for h in (esc.ana, esc.beto):
+        assert restablecer(esc, esc.carla_id, h).status_code == 403
+    assert restablecer(esc, 1).status_code == 400      # la propia se cambia con su contraseña actual
+    assert restablecer(esc, 9999).status_code == 404
+    desactivar(esc, esc.carla_id)
+    assert restablecer(esc, esc.carla_id).status_code == 409
+    assert login(esc.c, "beto", "clave123")  # nada cambió
+    assert eventos_cuenta(esc.beto_id) == []
+
+
+def test_restablecer_quita_el_freno_de_intentos_fallidos(esc):
+    for _ in range(5):
+        entrar(esc, "beto", "mala")
+    assert entrar(esc, "beto", "clave123").status_code == 429
+    temporal = restablecer(esc, esc.beto_id).json()["password_temporal"]
+    assert entrar(esc, "beto", temporal).status_code == 200

@@ -97,6 +97,28 @@ def descargar_archivo(archivo_id: int, u: dict = Depends(usuario_actual), db=Dep
 
 # --- Comentarios y archivos juntos (HU-05-003) ---
 
+# --- HU-05-004 Corregir contenido propio ---
+
+@router.put("/comentarios/{comentario_id}")
+def editar_comentario(comentario_id: int, data: ComentarioIn, u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.editar_comentario(db, comentario_id, u["id"], data.texto)
+
+
+@router.delete("/comentarios/{comentario_id}")
+def retirar_comentario(comentario_id: int, u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.retirar_comentario(db, comentario_id, u["id"])
+
+
+@router.get("/comentarios/{comentario_id}/ediciones")
+def ediciones_comentario(comentario_id: int, u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.ediciones(db, comentario_id, u["id"])
+
+
+@router.delete("/archivos/{archivo_id}")
+def retirar_archivo(archivo_id: int, u: dict = Depends(usuario_actual), db=Depends(get_db)):
+    return service.retirar_archivo(db, archivo_id, u["id"])
+
+
 @router.get("/proyectos/{proyecto_id}/actividad")
 def actividad_proyecto(proyecto: dict = Depends(proyecto_autorizado), db=Depends(get_db)):
     return service.actividad(db, proyecto["id"])

@@ -484,3 +484,76 @@ def test_cerrado_se_consulta_completo_y_sin_acceso_queda_bloqueado(esc):
     for ruta in consultas:
         assert esc.c.get(ruta, headers=esc.beto).status_code == 200, ruta
         assert esc.c.get(ruta, headers=esc.carla).status_code == 403, ruta
+
+
+# HU-05-004 Corregir contenido propio
+def publicar(e, h=None, texto="Primera versión"):
+    r = e.c.post(f"/api/proyectos/{e.pid}/comentarios", headers=h or e.beto, json={"texto": texto})
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def actividad(e, h=None):
+    return e.c.get(f"/api/proyectos/{e.pid}/actividad", headers=h or e.ana).json()
+
+
+def test_el_autor_edita_y_queda_constancia(esc):
+    c = publicar(esc)
+    r = esc.c.put(f"/api/comentarios/{c['id']}", headers=esc.beto, json={"texto": "Versión corregida"})
+    assert r.status_code == 200, r.text
+    [vigente] = actividad(esc)
+    assert (vigente["texto"], vigente["ediciones"], vigente["autor_nombre"]) == ("Versión corregida", 1, "Beto")
+    assert vigente["editado_en"] and vigente["creado_en"] == c["creado_en"]
+    [edicion] = esc.c.get(f"/api/comentarios/{c['id']}/ediciones", headers=esc.ana).json()
+    assert (edicion["texto_anterior"], edicion["editado_por_nombre"]) == ("Primera versión", "Beto") and edicion["editado_en"]
+    # guardar el mismo texto no es otra edición
+    esc.c.put(f"/api/comentarios/{c['id']}", headers=esc.beto, json={"texto": "Versión corregida"})
+    assert actividad(esc)[0]["ediciones"] == 1
+
+
+def test_solo_el_autor_corrige_y_el_intento_no_altera_nada(esc):
+    c = publicar(esc)
+    antes = actividad(esc)
+    for h in (esc.ana, esc.carla):  # el responsable del proyecto tampoco; carla ni participa
+        assert esc.c.put(f"/api/comentarios/{c['id']}", headers=h, json={"texto": "Otro"}).status_code == 403
+        assert esc.c.delete(f"/api/comentarios/{c['id']}", headers=h).status_code == 403
+    assert esc.c.put(f"/api/comentarios/{c['id']}", headers=esc.ana, json={"texto": "Otro"}).json()["detail"] == \
+        "Solo quien lo publicó puede corregirlo o retirarlo"
+    assert esc.c.get(f"/api/comentarios/{c['id']}/ediciones", headers=esc.carla).status_code == 403
+    assert esc.c.put("/api/comentarios/9999", headers=esc.beto, json={"texto": "X"}).status_code == 403
+    assert esc.c.put(f"/api/comentarios/{c['id']}", headers=esc.beto, json={"texto": "  "}).status_code == 400
+    assert actividad(esc) == antes
+
+
+def test_retirar_comentario_conserva_quien_y_cuando(esc):
+    c = publicar(esc)
+    esc.c.put(f"/api/comentarios/{c['id']}", headers=esc.beto, json={"texto": "Editado"})
+    r = esc.c.delete(f"/api/comentarios/{c['id']}", headers=esc.beto)
+    assert r.status_code == 200
+    [retirado] = actividad(esc)
+    assert (retirado["texto"], retirado["retirado_por_nombre"], retirado["autor_nombre"]) == (None, "Beto", "Beto")
+    assert retirado["retirado_en"]
+    assert esc.c.get(f"/api/comentarios/{c['id']}/ediciones", headers=esc.ana).json() == []  # no se muestra texto
+    assert esc.c.delete(f"/api/comentarios/{c['id']}", headers=esc.beto).json()["retirado_en"] == retirado["retirado_en"]
+    assert esc.c.put(f"/api/comentarios/{c['id']}", headers=esc.beto, json={"texto": "Revivir"}).status_code == 400
+
+
+def test_retirar_archivo_propio(esc):
+    from .test_sprint4 import adjuntar
+    f = adjuntar(esc, f"/api/proyectos/{esc.pid}", esc.beto).json()
+    assert esc.c.delete(f"/api/archivos/{f['id']}", headers=esc.ana).status_code == 403
+    assert esc.c.get(f"/api/archivos/{f['id']}/descarga", headers=esc.ana).status_code == 200
+    r = esc.c.delete(f"/api/archivos/{f['id']}", headers=esc.beto)
+    assert r.status_code == 200
+    [archivo] = esc.c.get(f"/api/proyectos/{esc.pid}/archivos", headers=esc.ana).json()
+    assert (archivo["nombre"], archivo["retirado_por_nombre"], archivo["autor_nombre"]) == (None, "Beto", "Beto")
+    assert esc.c.get(f"/api/archivos/{f['id']}/descarga", headers=esc.ana).status_code == 404
+    assert esc.c.get(f"/api/archivos/{f['id']}/descarga", headers=esc.carla).status_code == 403
+
+
+def test_en_proyecto_cerrado_no_se_corrige(esc):
+    c = publicar(esc)
+    assert cerrar(esc).status_code == 200
+    assert esc.c.put(f"/api/comentarios/{c['id']}", headers=esc.beto, json={"texto": "Tarde"}).status_code == 400
+    assert esc.c.delete(f"/api/comentarios/{c['id']}", headers=esc.beto).status_code == 400
+    assert actividad(esc)[0]["texto"] == "Primera versión"

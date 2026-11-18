@@ -171,6 +171,15 @@
 .lista-proximas { display: grid; gap: var(--e-1); }
 .lista-proximas li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--e-2); }
 
+/* ---------- Corregir contenido propio (HU-05-004) ---------- */
+
+.acciones-propias { display: inline-flex; gap: var(--e-1); margin-left: auto; }
+.retirado { display: inline-flex; align-items: center; gap: var(--e-2); color: var(--texto-2); font-style: italic; }
+.retirado .icono { width: 14px; height: 14px; }
+.ediciones { margin-top: var(--e-2); padding-left: var(--e-3); border-left: 2px solid var(--borde); }
+.ediciones ol { display: grid; gap: var(--e-2); margin-top: var(--e-1); }
+.ediciones .texto-largo { color: var(--texto-2); }
+
 /* ---------- Proyectos cerrados e historial (HU-02-006) ---------- */
 
 .pestanas-proyectos, .filtro-historial { margin-bottom: var(--e-4); }

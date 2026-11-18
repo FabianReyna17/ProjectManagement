@@ -1,16 +1,18 @@
-"""Comentarios y archivos de proyectos y tareas (HU-05-001, HU-05-002, HU-05-003).
+"""Comentarios y archivos de proyectos y tareas (HU-05-001 a HU-05-004).
 
 No importa FastAPI. El proyecto o la tarea llegan ya autorizados (participación activa,
 comprobada en cada petición), así que quien perdió el acceso no puede leer ni publicar,
 aunque use un enlace directo. Cualquier participante puede comentar y adjuntar.
 La descarga de un archivo vuelve a comprobar el acceso al proyecto del archivo.
+Solo su autor corrige o retira lo que publicó; nada se borra (HU-05-004).
 """
 import hashlib
 import os
 import re
 from typing import Optional
 
-from ...core.errors import DatosInvalidos, Prohibido
+from ...core.errors import Conflicto, DatosInvalidos, NoEncontrado, Prohibido
+from ...db.database import transaccion
 from ...db.idempotencia import crear_una_vez
 from ..proyectos import service as proyectos
 from . import almacen
@@ -41,11 +43,76 @@ def comentar(db, proyecto_id: int, tarea_id: Optional[int], autor_id: int, texto
     proyectos.exigir_abierto_id(db, proyecto_id)  # HU-02-005
     cid = crear_una_vez(db, autor_id, clave, "comentario",
                         lambda: repo.insertar_comentario(db, proyecto_id, tarea_id, texto, autor_id))
-    return repo.obtener_comentario(db, cid)
+    return _comentario_publico(repo.obtener_comentario(db, cid))
+
+
+def _comentario_publico(c: dict) -> dict:
+    """HU-05-004: de un comentario retirado se ve quién y cuándo lo retiró, no su texto."""
+    return {**c, "texto": None} if c["retirado_en"] else c
 
 
 def comentarios(db, proyecto_id: int, tarea_id: Optional[int] = None) -> list:
-    return repo.listar_comentarios(db, proyecto_id, tarea_id)
+    return [_comentario_publico(c) for c in repo.listar_comentarios(db, proyecto_id, tarea_id)]
+
+
+# --- Corregir contenido propio (HU-05-004) ---
+
+MSG_SOLO_AUTOR = "Solo quien lo publicó puede corregirlo o retirarlo"
+MSG_RETIRADO = "Este comentario ya fue retirado: no se puede editar"
+MSG_EDITADO = "El comentario cambió mientras lo editabas. Vuelve a abrirlo; tu cambio no se guardó"
+MSG_ARCHIVO_RETIRADO = "Quien adjuntó este archivo lo retiró: ya no se puede descargar"
+
+
+def _propio(db, elemento: Optional[dict], usuario_id: int) -> dict:
+    """Solo con acceso vigente al proyecto (si no → Prohibido, sin revelar si existe), solo
+    su autor (si no → Prohibido con el motivo) y solo si el proyecto sigue abierto."""
+    if not elemento:
+        raise Prohibido()
+    proyectos.obtener_autorizado(db, elemento["proyecto_id"], usuario_id)
+    if elemento["autor_id"] != usuario_id:
+        raise Prohibido(MSG_SOLO_AUTOR)
+    proyectos.exigir_abierto_id(db, elemento["proyecto_id"])
+    return elemento
+
+
+def editar_comentario(db, comentario_id: int, usuario_id: int, texto: str) -> dict:
+    """El texto vigente cambia y el anterior queda en sus ediciones con quién y cuándo.
+    Guardar el mismo texto no cuenta como edición."""
+    c = _propio(db, repo.obtener_comentario(db, comentario_id), usuario_id)
+    if c["retirado_en"]:
+        raise DatosInvalidos(MSG_RETIRADO)
+    if texto != c["texto"]:
+        with transaccion(db):
+            if not repo.editar_comentario(db, comentario_id, c["texto"], texto, usuario_id):
+                raise Conflicto(MSG_EDITADO)
+    return _comentario_publico(repo.obtener_comentario(db, comentario_id))
+
+
+def retirar_comentario(db, comentario_id: int, usuario_id: int) -> dict:
+    """Deja de mostrarse su texto; queda la constancia de quién lo retiró y cuándo. Repetir no cambia nada."""
+    _propio(db, repo.obtener_comentario(db, comentario_id), usuario_id)
+    with transaccion(db):
+        repo.retirar(db, "comentarios", comentario_id, usuario_id)
+    return _comentario_publico(repo.obtener_comentario(db, comentario_id))
+
+
+def ediciones(db, comentario_id: int, usuario_id: int) -> list:
+    """Textos anteriores de un comentario editado, para quien tiene acceso al proyecto.
+    De un comentario retirado no se muestra ningún texto."""
+    c = repo.obtener_comentario(db, comentario_id)
+    if not c:
+        raise Prohibido()
+    proyectos.obtener_autorizado(db, c["proyecto_id"], usuario_id)
+    return [] if c["retirado_en"] else repo.listar_ediciones(db, comentario_id)
+
+
+def retirar_archivo(db, archivo_id: int, usuario_id: int) -> dict:
+    """El archivo deja de listarse con su nombre y de poder descargarse; su registro (y el
+    contenido, mientras se acuerda la política de conservación) se conservan."""
+    _propio(db, repo.obtener_archivo(db, archivo_id), usuario_id)
+    with transaccion(db):
+        repo.retirar(db, "archivos", archivo_id, usuario_id)
+    return _publico(repo.obtener_archivo(db, archivo_id))
 
 
 # --- Archivos (HU-05-002) ---
@@ -97,7 +164,8 @@ def adjuntar(db, proyecto_id: int, tarea_id: Optional[int], autor_id: int, nombr
 
 
 def _publico(archivo: dict) -> dict:
-    return {k: v for k, v in archivo.items() if k != "almacen"}
+    publico = {k: v for k, v in archivo.items() if k != "almacen"}
+    return {**publico, "nombre": None} if archivo["retirado_en"] else publico  # HU-05-004
 
 
 def archivos(db, proyecto_id: int, tarea_id: Optional[int] = None) -> list:
@@ -111,6 +179,8 @@ def descargar(db, archivo_id: int, usuario_id: int) -> tuple[dict, bytes]:
     if not archivo:
         raise Prohibido()
     proyectos.obtener_autorizado(db, archivo["proyecto_id"], usuario_id)
+    if archivo["retirado_en"]:
+        raise NoEncontrado(MSG_ARCHIVO_RETIRADO)
     return _publico(archivo), almacen.leer(archivo["almacen"])
 
 

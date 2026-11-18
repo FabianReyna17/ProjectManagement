@@ -35,6 +35,15 @@ python -m pytest -v
 
 Cada prueba usa su propia BD temporal. GitHub Actions las corre en cada push.
 
+Pruebas E2E en navegador (recorrido completo, permisos en la interfaz y uso desde el teléfono). Sin Playwright instalado se saltan:
+
+```bash
+cd backend
+python -m pip install -r requirements-e2e.txt
+python -m playwright install chromium
+python -m pytest tests/e2e -v
+```
+
 ## Estructura
 
 ```
@@ -109,6 +118,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 6 | HU-08-005 | Restaurar y verificar la recuperación: `python -m app.modules.respaldos.restauracion RESPALDO.zip --bd … --archivos …` verifica el respaldo antes de copiar nada, no pisa una BD existente sin `--forzar`, aplica las migraciones pendientes y mide el tiempo. Con `--comparar-con ORIGEN.db --informe X.md` documenta por tabla qué coincide y qué se registró o cambió después del respaldo (no recuperable desde él). Procedimiento de producción y de prueba, límites propuestos (1 h de recuperación, hasta 24 h de pérdida) y resultado del ensayo en [Respaldo y restauración](docs/Respaldo_y_Restauracion.md). Las pruebas restauran, comparan con el origen y levantan la aplicación sobre la copia: relaciones, autoría, adjuntos y permisos se conservan y nadie gana acceso |
 | 6 | HU-01-010 | Historial de cambios de acceso (solo Admin; ni el responsable del proyecto): altas de cuenta, cambios de función, desactivaciones, restablecimientos y cada alta o retiro de acceso a un proyecto (al crearlo, al agregar o retirar participantes y al cambiar de responsable), con persona, proyecto, actor, fecha y valor anterior y nuevo. Vista "Historial de accesos" desde Usuarios, filtrable por persona o proyecto. Los eventos solo se agregan: cambiar o desactivar una cuenta no altera los anteriores. La migración 0021 carga lo anterior desde cuentas y participantes con actor "No registrado" — `GET /api/cambios-acceso?usuario_id=&proyecto_id=` |
 | 6 | TEC-02 | Correcciones y regresión: el admin inicial debe cambiar su contraseña al primer ingreso (`ADMIN_PASSWORD_INICIAL`); las contraseñas ya no se recortan (las guardadas recortadas siguen sirviendo y no se aceptan solo espacios); en "Usuarios" la tabla de cuentas va a todo el ancho para que sus acciones no queden cortadas. `tests/test_regresion_permisos.py` recorre todas las rutas de la API: sin sesión, con cuenta desactivada o con contraseña temporal pendiente no responden; las de administración solo el Admin; quien no participa recibe 403 en todo lo del proyecto sin que cambie nada |
+| 6 | TEC-02 | Pruebas E2E con Playwright (`tests/e2e`), con la aplicación real en un servidor local y una sesión aislada por persona: el recorrido completo (el admin cambia la contraseña inicial y registra cuentas → la responsable crea el proyecto, da acceso y asigna una tarea → el integrante abre el aviso, inicia la tarea y reporta un bloqueo → la responsable abre el aviso, resuelve, termina y cierra el proyecto); permisos en la interfaz ("Sin acceso" con enlace directo, desactivar una cuenta con la sesión abierta, restablecer acceso y cambio obligatorio, historial de accesos) y uso desde el teléfono sin desbordes. CI las corre en un job aparte |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 

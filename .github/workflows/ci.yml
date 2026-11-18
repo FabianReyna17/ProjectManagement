@@ -1,4 +1,3 @@
-# Mover este archivo a .github/workflows/ci.yml en la raíz del repositorio
 name: CI
 
 on: [push, pull_request]
@@ -15,4 +14,20 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - run: python -m pytest -v
+      - run: python -m pytest -v --ignore=tests/e2e
+
+  # TEC-02: recorrido completo en un navegador real
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements-e2e.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pytest tests/e2e -v

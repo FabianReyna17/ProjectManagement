@@ -1,4 +1,4 @@
-"""Comentarios y archivos de proyectos y tareas (HU-05-001, HU-05-002).
+"""Comentarios y archivos de proyectos y tareas (HU-05-001, HU-05-002, HU-05-003).
 
 No importa FastAPI. El proyecto o la tarea llegan ya autorizados (participación activa,
 comprobada en cada petición), así que quien perdió el acceso no puede leer ni publicar,
@@ -110,3 +110,14 @@ def descargar(db, archivo_id: int, usuario_id: int) -> tuple[dict, bytes]:
         raise Prohibido()
     proyectos.obtener_autorizado(db, archivo["proyecto_id"], usuario_id)
     return _publico(archivo), almacen.leer(archivo["almacen"])
+
+
+# --- Comentarios y archivos juntos (HU-05-003) ---
+
+def actividad(db, proyecto_id: int, tarea_id: Optional[int] = None) -> list:
+    """Comentarios y archivos del destino exacto en una sola línea de tiempo, en el orden en
+    que se publicaron. Cada elemento lleva tipo 'comentario' o 'archivo' y conserva su autor:
+    reasignar la tarea no cambia nada aquí."""
+    elementos = ([{**c, "tipo": "comentario"} for c in comentarios(db, proyecto_id, tarea_id)]
+                 + [{**a, "tipo_archivo": a["tipo"], "tipo": "archivo"} for a in archivos(db, proyecto_id, tarea_id)])
+    return sorted(elementos, key=lambda e: (e["creado_en"], e["tipo"] == "archivo", e["id"]))

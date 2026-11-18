@@ -113,8 +113,17 @@
   overflow-wrap: anywhere;
 }
 .enlace:hover { text-decoration: underline; }
-.archivo .meta { margin-left: var(--e-2); }
-.archivo p + .meta, .archivo > .meta { margin-left: 0; }
+.archivo p:first-child { display: flex; flex-wrap: wrap; align-items: center; gap: var(--e-2); }
+.archivo p:first-child .icono { color: var(--texto-2); }
+
+/* HU-05-003: comentarios y archivos en una sección */
+.selector-vista .boton:not(.secundario) .conteo { color: inherit; opacity: .85; }
+.colaboracion-formularios {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--e-4);
+  margin-top: var(--e-3);
+}
 
 /* ---------- Avisos (HU-06-005) ---------- */
 

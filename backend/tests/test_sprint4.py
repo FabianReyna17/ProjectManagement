@@ -432,3 +432,76 @@ def test_sin_acceso_no_adjunta_ni_descarga(esc):
 def test_reglas_de_archivos(esc):
     r = esc.c.get("/api/archivos/reglas", headers=esc.beto).json()
     assert r["max_bytes"] == 10 * 1024 * 1024 and "pdf" in r["extensiones"] and "exe" not in r["extensiones"]
+
+
+# HU-05-003 Consultar comentarios y archivos
+def actividad(e, url, h):
+    r = e.c.get(f"{url}/actividad", headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def fechar(tabla, fila_id, momento):
+    """Fija la fecha de un registro para comprobar el orden sin esperar segundos reales."""
+    from sqlalchemy import text
+
+    from app.db.database import get_engine
+    with get_engine().begin() as conn:
+        conn.execute(text(f"UPDATE {tabla} SET creado_en = :m WHERE id = :id"), {"m": momento, "id": fila_id})
+
+
+def test_comentarios_y_archivos_en_una_sola_lista(esc):
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    url = f"/api/tareas/{t['id']}"
+    c1 = comentar(esc, url, esc.ana, "Aquí va el boceto").json()
+    f1 = adjuntar(esc, url, esc.ana, "boceto.png", b"\x89PNG").json()
+    c2 = comentar(esc, url, esc.beto, "Lo reviso").json()
+    fechar("comentarios", c1["id"], "2026-11-10 09:00:00")
+    fechar("archivos", f1["id"], "2026-11-10 09:05:00")
+    fechar("comentarios", c2["id"], "2026-11-10 10:00:00")
+
+    lista = actividad(esc, url, esc.beto)
+    assert [(x["tipo"], x["id"]) for x in lista] == [("comentario", c1["id"]), ("archivo", f1["id"]), ("comentario", c2["id"])]
+    archivo = lista[1]
+    assert (archivo["nombre"], archivo["tipo_archivo"], archivo["autor_nombre"]) == ("boceto.png", "image/png", "Ana")
+    assert "almacen" not in archivo
+
+
+def test_actividad_no_mezcla_otros_destinos(esc):
+    a, b = crear_tarea(esc, "A"), crear_tarea(esc, "B")
+    comentar(esc, f"/api/tareas/{a['id']}", esc.ana, "De A")
+    adjuntar(esc, f"/api/tareas/{b['id']}", esc.ana, "de_b.pdf")
+    comentar(esc, f"/api/proyectos/{esc.pid}", esc.ana, "Del proyecto")
+    r = esc.c.post("/api/proyectos", headers=esc.ana, json={
+        "nombre": "Otro", "objetivo": "x", "responsable_id": esc.ana_id,
+        "fecha_inicio": "2026-11-01", "fecha_fin": "2026-12-01"})
+    comentar(esc, f"/api/proyectos/{r.json()['id']}", esc.ana, "De otro proyecto")
+
+    assert [x.get("texto") or x.get("nombre") for x in actividad(esc, f"/api/tareas/{a['id']}", esc.ana)] == ["De A"]
+    assert [x.get("texto") or x.get("nombre") for x in actividad(esc, f"/api/tareas/{b['id']}", esc.ana)] == ["de_b.pdf"]
+    assert [x.get("texto") or x.get("nombre") for x in actividad(esc, f"/api/proyectos/{esc.pid}", esc.ana)] == ["Del proyecto"]
+
+
+def test_reasignar_conserva_conversacion_y_archivos(esc):
+    assert esc.c.post(f"/api/proyectos/{esc.pid}/participantes", headers=esc.ana,
+                      json={"usuario_id": esc.carla_id}).status_code == 201
+    t = crear_tarea(esc, responsable_id=esc.beto_id)
+    url = f"/api/tareas/{t['id']}"
+    comentar(esc, url, esc.beto, "Avance del boceto")
+    f = adjuntar(esc, url, esc.beto, "boceto.pdf").json()
+    antes = actividad(esc, url, esc.ana)
+
+    esc.c.put(f"{url}/responsable", headers=esc.ana, json={"usuario_id": esc.carla_id})
+    assert actividad(esc, url, esc.carla) == antes  # misma autoría y orden para quien sigue autorizado
+    assert actividad(esc, url, esc.beto) == antes   # beto sigue participando en el proyecto
+    assert esc.c.get(f"/api/archivos/{f['id']}/descarga", headers=esc.carla).status_code == 200
+
+
+def test_actividad_sin_acceso(esc):
+    t = crear_tarea(esc)
+    f = adjuntar(esc, f"/api/tareas/{t['id']}", esc.ana).json()
+    for url in (f"/api/tareas/{t['id']}", f"/api/proyectos/{esc.pid}"):
+        assert esc.c.get(f"{url}/actividad", headers=esc.carla).status_code == 403
+    esc.c.delete(f"/api/proyectos/{esc.pid}/participantes/{esc.beto_id}", headers=esc.ana)
+    assert esc.c.get(f"/api/tareas/{t['id']}/actividad", headers=esc.beto).status_code == 403
+    assert esc.c.get(f"/api/archivos/{f['id']}/descarga", headers=esc.beto).status_code == 403

@@ -93,3 +93,15 @@ def descargar_archivo(archivo_id: int, u: dict = Depends(usuario_actual), db=Dep
         "Content-Disposition": f"attachment; filename*=UTF-8''{quote(archivo['nombre'])}",
         "Cache-Control": "private, no-store",
     })
+
+
+# --- Comentarios y archivos juntos (HU-05-003) ---
+
+@router.get("/proyectos/{proyecto_id}/actividad")
+def actividad_proyecto(proyecto: dict = Depends(proyecto_autorizado), db=Depends(get_db)):
+    return service.actividad(db, proyecto["id"])
+
+
+@router.get("/tareas/{tarea_id}/actividad")
+def actividad_tarea(tarea: dict = Depends(tarea_autorizada), db=Depends(get_db)):
+    return service.actividad(db, tarea["proyecto_id"], tarea["id"])

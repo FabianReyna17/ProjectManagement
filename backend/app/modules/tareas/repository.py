@@ -63,6 +63,19 @@ def listar_asignadas(db, usuario_id: int) -> list:
                            ORDER BY {ORDEN_LISTA}""", u=usuario_id)
 
 
+def listar_por_vencer(db, desde: str, hasta: str) -> list:
+    """HU-06-002: tareas abiertas con responsable que vencen entre `desde` y `hasta` (incluidos),
+    solo si esa persona sigue activa y participando en el proyecto y este no está cerrado."""
+    return varios(db, """SELECT t.id, t.proyecto_id, t.responsable_id, t.fecha_limite
+                         FROM tareas t
+                         JOIN proyectos p      ON p.id = t.proyecto_id AND p.estado != 'cerrado'
+                         JOIN participantes pa ON pa.proyecto_id = t.proyecto_id
+                                              AND pa.usuario_id = t.responsable_id AND pa.activo = 1
+                         JOIN usuarios u       ON u.id = t.responsable_id AND u.activo = 1
+                         WHERE t.estado != 'terminada' AND t.fecha_limite BETWEEN :desde AND :hasta
+                         ORDER BY t.id""", desde=desde, hasta=hasta)
+
+
 def actualizar_responsable(db, tarea_id: int, responsable_id: int) -> None:
     db.execute(text("UPDATE tareas SET responsable_id = :r WHERE id = :id"), {"r": responsable_id, "id": tarea_id})
 

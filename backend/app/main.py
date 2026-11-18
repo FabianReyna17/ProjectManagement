@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -6,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import programado
 from .core.errors import ErrorNegocio, codigo_http
 from .db.database import init_db
 from .modules.acceso.router import router as acceso_router
@@ -20,7 +22,11 @@ FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    minutos = programado.intervalo_minutos()
+    ciclo = asyncio.create_task(programado.ciclo(minutos)) if minutos > 0 else None  # HU-06-002
     yield
+    if ciclo:
+        ciclo.cancel()
 
 
 app = FastAPI(title="Gestión de Proyectos", lifespan=lifespan)

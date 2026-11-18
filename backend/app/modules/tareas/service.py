@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001, HU-06-003, HU-07-001 a HU-07-003, HU-07-005, HU-08-002, HU-08-003).
+"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001 a HU-06-003, HU-07-001 a HU-07-003, HU-07-005, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -6,7 +6,7 @@ Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
 Cada asignación avisa a la nueva persona responsable y cada bloqueo al responsable del
 proyecto, en la misma transacción que el cambio.
 """
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from ...core import concurrencia, tiempo
@@ -157,6 +157,18 @@ def resumen(db, proyecto: dict) -> dict:
     proximas = sorted((t for t in abiertas if t["fecha_limite"] and t["dias_restantes"] >= 0),
                       key=lambda t: (t["fecha_limite"], t["id"]))[:PROXIMAS]
     return {"total": len(tareas), "abiertas": len(abiertas), "indicadores": indicadores, "proximas": proximas}
+
+
+def generar_avisos_vencimiento(db, dia: Optional[date] = None) -> int:
+    """HU-06-002 (lo llama el proceso programado): cada tarea abierta que vence dentro del plazo
+    de anticipación (hoy y los DIAS_POR_VENCER días siguientes, con el día de la organización)
+    avisa a su responsable con la fecha vigente. Correr el proceso de nuevo no repite avisos;
+    si la tarea se reprograma o reasigna, el vencimiento nuevo sí se avisa. Devuelve cuántos generó."""
+    dia = dia or tiempo.hoy()
+    hasta = dia + timedelta(days=tiempo.DIAS_POR_VENCER)
+    with transaccion(db):
+        return sum(avisos.avisar_vencimiento(db, t["proyecto_id"], t["id"], t["responsable_id"], t["fecha_limite"])
+                   for t in repo.listar_por_vencer(db, dia.isoformat(), hasta.isoformat()))
 
 
 # HU-07-005: funciones que consultan el estado general (los integrantes ven sus tareas y proyectos)

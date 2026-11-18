@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 def bd_limpia(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
     monkeypatch.setenv("ARCHIVOS_DIR", str(tmp_path / "archivos"))
+    monkeypatch.setenv("AVISOS_CADA_MIN", "0")  # el proceso programado se llama a mano en las pruebas
 
 
 @pytest.fixture(autouse=True)

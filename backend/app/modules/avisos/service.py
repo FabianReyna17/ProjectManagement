@@ -1,4 +1,4 @@
-"""Avisos dentro de la aplicación (HU-06-001, HU-06-003, HU-06-005).
+"""Avisos dentro de la aplicación (HU-06-001, HU-06-002, HU-06-003, HU-06-005).
 
 No importa FastAPI ni otros módulos. Las funciones que generan avisos no abren
 transacción: se llaman dentro de la del cambio que los origina, así un cambio que
@@ -16,10 +16,11 @@ from . import repository as repo
 
 ASIGNACION = "asignacion"
 BLOQUEO = "bloqueo"
+VENCIMIENTO = "vencimiento"
 
 # Datos que solo se muestran con acceso vigente al proyecto
 PROTEGIDOS = ("proyecto_id", "proyecto_nombre", "tarea_id", "tarea_nombre", "actor_id", "actor_nombre",
-              "bloqueo_id", "bloqueo_motivo", "bloqueo_resuelto")
+              "bloqueo_id", "bloqueo_motivo", "bloqueo_resuelto", "fecha_limite")
 
 
 def avisar_asignacion(db, proyecto_id: int, tarea_id: int, usuario_id: Optional[int],
@@ -38,6 +39,12 @@ def avisar_bloqueo(db, proyecto_id: int, tarea_id: int, responsable_proyecto_id:
     if responsable_proyecto_id == actor_id:
         return
     repo.insertar(db, responsable_proyecto_id, BLOQUEO, proyecto_id, tarea_id, evento_id, actor_id, bloqueo_id)
+
+
+def avisar_vencimiento(db, proyecto_id: int, tarea_id: int, usuario_id: int, fecha_limite: str) -> bool:
+    """HU-06-002: la persona asignada recibe un aviso con la fecha límite vigente. Un mismo
+    vencimiento (tarea + fecha) se le avisa una sola vez. True si se generó el aviso."""
+    return repo.insertar_vencimiento(db, usuario_id, proyecto_id, tarea_id, fecha_limite)
 
 
 def _publico(aviso: dict) -> dict:

@@ -5,6 +5,8 @@ const TEXTO_AVISO = {
   asignacion: (a) => `${escapar(a.actor_nombre)} te asignó la tarea ${enlaceAviso(a, a.tarea_nombre)}`,
   bloqueo: (a) => `${escapar(a.actor_nombre)} reportó un bloqueo en la tarea ${enlaceAviso(a, a.tarea_nombre)} ` +
     (a.bloqueo_resuelto ? `<span class="chip chip-resuelto">${icono("ok")}Resuelto</span>` : etiquetaBloqueo()),
+  // HU-06-002: lo genera el sistema; muestra la fecha límite que tenía la tarea al avisar
+  vencimiento: (a) => `${icono("reloj")} La tarea ${enlaceAviso(a, a.tarea_nombre)} que tienes asignada vence el ${fecha(a.fecha_limite)}`,
 };
 
 /** El enlace pasa por #/avisos/{id}: lo marca como leído y lleva a la tarea si el acceso sigue vigente. */
@@ -51,7 +53,7 @@ async function vistaAvisos() {
       </header>
       ${avisos.length
         ? `<ol class="lista-cambios lista-avisos">${avisos.map(itemAviso).join("")}</ol>`
-        : vacio("No tienes avisos", "Cuando te asignen una tarea o se bloquee una tarea de un proyecto a tu cargo, te avisaremos aquí.",
+        : vacio("No tienes avisos", "Cuando te asignen una tarea, se acerque su fecha límite o se bloquee una tarea de un proyecto a tu cargo, te avisaremos aquí.",
                 `<a class="boton secundario" href="#/mis-tareas">Ver mis tareas</a>`)}`,
   };
 }

@@ -563,3 +563,71 @@ def test_estado_leido_desactualizado_da_conflicto(esc):
         conn.execute(text("UPDATE proyectos SET estado = 'planificado' WHERE id = :id"), {"id": esc.pid})
     r = cambiar_estado_proyecto(esc, esc.ana, "en_curso", anterior="en_curso")
     assert r.status_code == 409 and r.json()["vigente"] == {"estado": "planificado"}
+
+
+# HU-07-003 Resumen del proyecto
+def resumen(e, h):
+    r = e.c.get(f"/api/proyectos/{e.pid}/resumen", headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def en_dias(n):
+    from datetime import timedelta
+
+    from app.core import tiempo
+    return (tiempo.hoy() + timedelta(days=n)).isoformat()
+
+
+def escenario_resumen(e):
+    """Pendiente vencida · en curso bloqueada que vence pronto · pendiente lejana · terminada · sin fecha."""
+    ids = {}
+    ids["vencida"] = crear_tarea(e, "Vencida", responsable_id=e.beto_id, fecha_limite=en_dias(-2))["id"]
+    ids["bloqueada"] = crear_tarea(e, "Bloqueada", responsable_id=e.beto_id, fecha_limite=en_dias(1))["id"]
+    ids["lejana"] = crear_tarea(e, "Lejana", fecha_limite=en_dias(20))["id"]
+    ids["terminada"] = crear_tarea(e, "Terminada", fecha_limite=en_dias(-5))["id"]
+    ids["sin_fecha"] = crear_tarea(e, "Sin fecha")["id"]
+    for tid, estados in ((ids["bloqueada"], ["en_curso"]), (ids["terminada"], ["en_curso", "terminada"])):
+        for est in estados:
+            assert e.c.put(f"/api/tareas/{tid}/estado", headers=e.ana, json={"estado": est}).status_code == 200
+    e.c.post(f"/api/tareas/{ids['bloqueada']}/bloqueos", headers=e.beto, json={"motivo": "Falta acceso"})
+    return ids
+
+
+def test_resumen_cuenta_por_estado_vencidas_y_bloqueadas(esc):
+    escenario_resumen(esc)
+    r = resumen(esc, esc.beto)
+    totales = {k: v["total"] for k, v in r["indicadores"].items()}
+    assert totales == {"pendiente": 3, "en_curso": 1, "terminada": 1, "vencidas": 1, "por_vencer": 1, "bloqueadas": 1}
+    assert (r["total"], r["abiertas"]) == (5, 4)
+    assert [t["nombre"] for t in r["proximas"]] == ["Bloqueada", "Lejana"]  # abiertas que aún no vencen
+
+
+def test_cada_indicador_abre_su_lista_y_coincide_con_el_tablero(esc):
+    escenario_resumen(esc)
+    r = resumen(esc, esc.ana)
+    columnas = {c["estado"]: c["tareas"] for c in esc.c.get(f"/api/proyectos/{esc.pid}/tablero", headers=esc.ana).json()["columnas"]}
+    for clave, ind in r["indicadores"].items():
+        lista = esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.ana, params=ind["filtro"])
+        assert lista.status_code == 200, lista.text
+        assert len(lista.json()) == ind["total"], clave
+        if clave in columnas:
+            assert len(columnas[clave]) == ind["total"]
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/tareas", headers=esc.ana, params={"bloqueo": "otra"}).status_code == 400
+
+
+def test_resumen_refleja_solo_cambios_confirmados(esc):
+    ids = escenario_resumen(esc)
+    antes = resumen(esc, esc.ana)
+    assert esc.c.put(f"/api/tareas/{ids['bloqueada']}/estado", headers=esc.ana,
+                     json={"estado": "terminada"}).status_code == 400  # con bloqueo abierto no se termina
+    assert resumen(esc, esc.ana) == antes
+    esc.c.put(f"/api/tareas/{ids['vencida']}/estado", headers=esc.ana, json={"estado": "en_curso"})
+    ahora = {k: v["total"] for k, v in resumen(esc, esc.ana)["indicadores"].items()}
+    assert (ahora["pendiente"], ahora["en_curso"], ahora["vencidas"]) == (2, 2, 1)
+
+
+def test_resumen_sin_acceso(esc):
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/resumen", headers=esc.carla).status_code == 403
+    r = resumen(esc, esc.ana)
+    assert r["total"] == 0 and all(v["total"] == 0 for v in r["indicadores"].values()) and r["proximas"] == []

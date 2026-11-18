@@ -57,7 +57,7 @@ ACCIONES["vista-tareas"] = (btn) => {
 
 // ---------- HU-07-002 Filtros (por proyecto; se recuerdan solo en esta pestaña) ----------
 
-const CAMPOS_FILTRO = ["estado", "responsable", "prioridad", "vencimiento"];
+const CAMPOS_FILTRO = ["estado", "responsable", "prioridad", "vencimiento", "bloqueo"];
 
 function filtrosTareas(pid) {
   let guardados = {};
@@ -81,6 +81,7 @@ function barraFiltros(pid, filtros, participantes) {
     responsable: ["Responsable", "Todos", [["sin_asignar", "Sin asignar"], ...participantes.map((x) => [String(x.id), x.nombre])]],
     prioridad: ["Prioridad", "Todas", Object.entries(PRIORIDADES)],
     vencimiento: ["Vencimiento", "Cualquiera", [["vencida", "Vencidas"], ["por_vencer", "Por vencer"]]],
+    bloqueo: ["Bloqueo", "Todas", [["bloqueada", "Bloqueadas"], ["sin_bloqueo", "Sin bloqueo"]]],
   };
   const activos = CAMPOS_FILTRO.filter((c) => filtros[c]).map((c) => {
     const [etiqueta, , lista] = opciones[c];
@@ -107,6 +108,51 @@ function barraFiltros(pid, filtros, participantes) {
 ACCIONES["quitar-filtros"] = (btn) => {
   almacen.borrar(`filtros-${btn.dataset.proyecto}`, sessionStorage);
   recargar();
+};
+
+// ---------- HU-07-003 Resumen del proyecto ----------
+
+const INDICADORES = [
+  ["pendiente", "Pendientes", "est-pendiente"], ["en_curso", "En curso", "est-en_curso"],
+  ["terminada", "Terminadas", "est-terminada"], ["vencidas", "Vencidas", "aviso"],
+  ["por_vencer", "Por vencer", "reloj"], ["bloqueadas", "Bloqueadas", "bloqueo"],
+];
+
+/** Cifras del proyecto (todas sus tareas, sin filtros); cada una abre la lista que la compone. */
+function resumenProyecto(pid, r) {
+  return `
+    <section class="bloque" aria-labelledby="titulo-resumen">
+      <h2 class="titulo-seccion" id="titulo-resumen">Resumen
+        <span class="conteo">${r.abiertas} abierta${r.abiertas === 1 ? "" : "s"} de ${r.total}</span></h2>
+      <ul class="indicadores">
+        ${INDICADORES.map(([clave, texto, ico]) => {
+          const ind = r.indicadores[clave];
+          return `<li><button type="button" class="indicador indicador-${clave}" data-accion="ver-indicador"
+                    data-proyecto="${Number(pid)}" data-filtro="${escapar(JSON.stringify(ind.filtro))}"
+                    aria-label="${escapar(`${ind.total} ${texto.toLowerCase()}: ver la lista`)}">
+                    <span class="indicador-valor num">${ind.total}</span>
+                    <span class="indicador-texto">${icono(ico)}${texto}</span>
+                  </button></li>`;
+        }).join("")}
+      </ul>
+      ${r.proximas.length ? `
+        <h3 class="subtitulo-seccion">Próximas fechas límite</h3>
+        <ul class="lista-proximas">
+          ${r.proximas.map((t) => `
+            <li><a href="#/tareas/${Number(t.id)}">${escapar(t.nombre)}</a>
+                <span class="fecha-con-marca">${fecha(t.fecha_limite)}${etiquetaVencimiento(t)}</span></li>`).join("")}
+        </ul>` : ""}
+    </section>`;
+}
+
+ACCIONES["ver-indicador"] = async (btn) => {
+  guardarFiltros(btn.dataset.proyecto, JSON.parse(btn.dataset.filtro));
+  almacen.guardar("vista-tareas", "tareas");  // la lista muestra todas las columnas del filtro
+  await recargar();
+  const titulo = document.getElementById("titulo-tareas");
+  titulo?.scrollIntoView({ block: "start" });
+  titulo?.setAttribute("tabindex", "-1");
+  titulo?.focus({ preventScroll: true });
 };
 
 /** Una columna por estado; las tarjetas llegan del servidor en el mismo orden que la lista. */

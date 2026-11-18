@@ -17,9 +17,11 @@ router = APIRouter(prefix="/api", tags=["tareas"])
 
 def filtros_tareas(estado: Optional[Estado] = None, prioridad: Optional[Prioridad] = None,
                    responsable: Optional[str] = Query(None, pattern=r"^(sin_asignar|\d+)$"),
-                   vencimiento: Optional[Literal["vencida", "por_vencer"]] = None) -> dict:
-    """HU-07-002: filtros opcionales; un valor desconocido → 400."""
-    return {"estado": estado, "prioridad": prioridad, "responsable": responsable, "vencimiento": vencimiento}
+                   vencimiento: Optional[Literal["vencida", "por_vencer"]] = None,
+                   bloqueo: Optional[Literal["bloqueada", "sin_bloqueo"]] = None) -> dict:
+    """HU-07-002 (y bloqueo, HU-07-003): filtros opcionales; un valor desconocido → 400."""
+    return {"estado": estado, "prioridad": prioridad, "responsable": responsable, "vencimiento": vencimiento,
+            "bloqueo": bloqueo}
 
 
 @router.post("/proyectos/{proyecto_id}/tareas", status_code=201)
@@ -39,6 +41,11 @@ def tareas_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), filtros: 
 def tablero_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), u: dict = Depends(usuario_actual),
                          filtros: dict = Depends(filtros_tareas), db=Depends(get_db)):
     return service.tablero(db, proyecto, u["id"], filtros)
+
+
+@router.get("/proyectos/{proyecto_id}/resumen")
+def resumen_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), db=Depends(get_db)):
+    return service.resumen(db, proyecto)
 
 
 @router.get("/mis-tareas")

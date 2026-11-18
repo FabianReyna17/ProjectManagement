@@ -139,6 +139,38 @@
   vertical-align: 1px;
 }
 
+/* ---------- Resumen del proyecto (HU-07-003) ---------- */
+
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--e-2);
+}
+.indicador {
+  display: grid;
+  gap: var(--e-1);
+  width: 100%;
+  padding: var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-2);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.indicador:hover { background: var(--superficie-hover); }
+.indicador-valor { font-size: var(--t-xl, 1.5rem); font-weight: var(--peso-fuerte); line-height: 1.1; }
+.indicador-texto { display: inline-flex; align-items: center; gap: var(--e-1); color: var(--texto-2); font-size: var(--t-sm); }
+.indicador-texto .icono { width: 14px; height: 14px; }
+.indicador-vencidas .indicador-texto .icono, .indicador-bloqueadas .indicador-texto .icono { color: var(--peligro); }
+.indicador-por_vencer .indicador-texto .icono { color: var(--aviso); }
+.indicador-terminada .indicador-texto .icono { color: var(--exito); }
+.indicador-en_curso .indicador-texto .icono { color: var(--acento); }
+.subtitulo-seccion { margin: var(--e-4) 0 var(--e-2); font-size: var(--t-sm); font-weight: var(--peso-medio); color: var(--texto-2); }
+.lista-proximas { display: grid; gap: var(--e-1); }
+.lista-proximas li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--e-2); }
+
 /* ---------- Filtros de tareas (HU-07-002) ---------- */
 
 .filtros-tareas {

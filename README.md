@@ -92,6 +92,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 4 | HU-05-002 | Adjuntar archivos al proyecto o a una tarea (cualquier participante), con nombre, tamaño, autor y fecha. Máximo 10 MB y solo tipos permitidos por extensión (PDF, imágenes, texto, Office/OpenDocument, ZIP); lo demás se rechaza con un mensaje claro y no queda adjunto. Un reintento con la misma `Idempotency-Key` no duplica y una carga que no se confirma no deja archivo en disco. La descarga comprueba el acceso vigente: una URL guardada no sirve a quien perdió el acceso — `POST/GET /api/proyectos/{id}/archivos`, `POST/GET /api/tareas/{id}/archivos` (cuerpo crudo, `?nombre=`), `GET /api/archivos/{id}/descarga`, `GET /api/archivos/reglas` |
 | 4 | HU-05-003 | Sección "Comentarios y archivos" en el proyecto y en la tarea: ambos en una sola lista en orden de publicación, con autor y fecha, filtro Todo / Comentarios / Archivos y los formularios para comentar y adjuntar. Solo muestra lo de ese destino (ni sus tareas ni otros proyectos); reasignar la tarea conserva conversación y archivos — `GET /api/proyectos/{id}/actividad`, `GET /api/tareas/{id}/actividad` |
 | 4 | HU-02-004 | El responsable inicia la ejecución del proyecto (Planificado → En curso) con confirmación; la ficha muestra desde cuándo y quién lo cambió, y el cambio queda en "Cambios del plan". Una transición no permitida o un estado inexistente se rechaza sin tocar el estado; el cierre queda para su propio procedimiento (HU-02-005). Si otra persona cambió el estado mientras tanto → 409 — `PUT /api/proyectos/{id}/estado` |
+| 4 | HU-07-003 | Resumen en la ficha del proyecto: pendientes, en curso, terminadas, vencidas, por vencer y bloqueadas, más las próximas fechas límite. Se calcula sobre la misma lista que el tablero (solo datos confirmados) y cada cifra abre la lista con su filtro; nuevo filtro "Bloqueo" — `GET /api/proyectos/{id}/resumen`, `?bloqueo=bloqueada|sin_bloqueo` |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 
@@ -122,4 +123,4 @@ Al llegar la historia que lo necesite:
 
 ## Siguientes sprints
 
-Resto de avisos, comentarios, adjuntos, desactivar cuentas y respaldos.
+Avisos de vencimiento y de cambios del plan, cierre de proyectos, supervisión general, carga por responsable, desactivar cuentas y respaldos.

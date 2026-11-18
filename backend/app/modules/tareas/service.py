@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001, HU-06-003, HU-07-001, HU-07-002, HU-08-002, HU-08-003).
+"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001, HU-06-003, HU-07-001 a HU-07-003, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -115,6 +115,7 @@ def _cumple(tarea: dict, filtros: dict) -> bool:
     return ((not filtros.get("estado") or tarea["estado"] == filtros["estado"])
             and (not filtros.get("prioridad") or tarea["prioridad"] == filtros["prioridad"])
             and (not filtros.get("vencimiento") or tarea["vencimiento"] == filtros["vencimiento"])
+            and (not filtros.get("bloqueo") or tarea["bloqueada"] == (filtros["bloqueo"] == "bloqueada"))
             and (not responsable
                  or (responsable == "sin_asignar" and tarea["responsable_id"] is None)
                  or (responsable.isdigit() and tarea["responsable_id"] == int(responsable))))
@@ -135,6 +136,27 @@ def tablero(db, proyecto: dict, usuario_id: int, filtros: Optional[dict] = None)
         puede = usuario_id in (t["responsable_id"], proyecto["responsable_id"])
         por_estado[t["estado"]].append({**t, "transiciones": _transiciones(t) if puede else []})
     return {"columnas": columnas}
+
+
+PROXIMAS = 5
+
+
+def resumen(db, proyecto: dict) -> dict:
+    """HU-07-003: cifras del proyecto calculadas sobre la misma lista que muestran la lista y el
+    tablero (datos confirmados). Cada cifra trae el filtro que abre las tareas que la componen.
+    Próximas fechas: tareas abiertas que aún no vencen, de la más cercana a la más lejana."""
+    tareas = listar_de_proyecto(db, proyecto)
+    abiertas = [t for t in tareas if t["estado"] != "terminada"]
+    filtros = {
+        **{e: {"estado": e} for e in NOMBRE_ESTADO},
+        "vencidas": {"vencimiento": "vencida"},
+        "por_vencer": {"vencimiento": "por_vencer"},
+        "bloqueadas": {"bloqueo": "bloqueada"},
+    }
+    indicadores = {clave: {"total": sum(_cumple(t, f) for t in tareas), "filtro": f} for clave, f in filtros.items()}
+    proximas = sorted((t for t in abiertas if t["fecha_limite"] and t["dias_restantes"] >= 0),
+                      key=lambda t: (t["fecha_limite"], t["id"]))[:PROXIMAS]
+    return {"total": len(tareas), "abiertas": len(abiertas), "indicadores": indicadores, "proximas": proximas}
 
 
 def mis_tareas(db, usuario_id: int) -> list:

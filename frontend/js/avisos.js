@@ -2,20 +2,26 @@
 
 /** Texto de cada tipo de aviso; los nombres vienen del servidor y se escapan. */
 const TEXTO_AVISO = {
-  asignacion: (a) => `${escapar(a.actor_nombre)} te asignó la tarea ` +
-    `<a href="#/tareas/${Number(a.tarea_id)}">${escapar(a.tarea_nombre)}</a>`,
+  asignacion: (a) => `${escapar(a.actor_nombre)} te asignó la tarea ${enlaceTarea(a)}`,
+  bloqueo: (a) => `${escapar(a.actor_nombre)} reportó un bloqueo en la tarea ${enlaceTarea(a)} ` +
+    (a.bloqueo_resuelto ? `<span class="chip chip-resuelto">${icono("ok")}Resuelto</span>` : etiquetaBloqueo()),
 };
+
+function enlaceTarea(a) {
+  return `<a href="#/tareas/${Number(a.tarea_id)}">${escapar(a.tarea_nombre)}</a>`;
+}
 
 function itemAviso(a) {
   const texto = TEXTO_AVISO[a.tipo]?.(a) || escapar(a.tipo);
   return `
     <li>
       <p>${texto}</p>
+      ${a.bloqueo_motivo ? `<p class="texto-largo">${escapar(a.bloqueo_motivo)}</p>` : ""}
       <p class="meta"><a href="#/proyectos/${Number(a.proyecto_id)}">${escapar(a.proyecto_nombre)}</a> · ${momento(a.creado_en)}</p>
     </li>`;
 }
 
-// HU-06-001 Aviso de nueva asignación: del más reciente al más antiguo
+// HU-06-001 y HU-06-003: asignaciones y bloqueos, del más reciente al más antiguo
 async function vistaAvisos() {
   const avisos = await API.get("/api/avisos");
   return {
@@ -30,7 +36,7 @@ async function vistaAvisos() {
       </header>
       ${avisos.length
         ? `<ol class="lista-cambios lista-avisos">${avisos.map(itemAviso).join("")}</ol>`
-        : vacio("No tienes avisos", "Cuando te asignen una tarea, te avisaremos aquí.",
+        : vacio("No tienes avisos", "Cuando te asignen una tarea o se bloquee una tarea de un proyecto a tu cargo, te avisaremos aquí.",
                 `<a class="boton secundario" href="#/mis-tareas">Ver mis tareas</a>`)}`,
   };
 }

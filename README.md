@@ -85,6 +85,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 3 | HU-08-003 | El plan de la tarea, su estado y los datos del proyecto se guardan campo por campo solo si nadie cambió ese dato desde que se leyó (UPDATE condicional). Si hubo cambio: 409 con el valor vigente, se avisa, lo escrito se conserva y se puede volver a confirmar; cambios en datos distintos no chocan |
 | 3 | HU-04-006 | Sección "Historial" en el detalle: responsable, fecha, prioridad, estado, avances, bloqueos y resoluciones en orden, con actor y fecha; sin acceso al proyecto no se puede consultar — `GET /api/tareas/{id}/historial` |
 | 4 | HU-06-001 | Al asignar una tarea (al crearla, asignarla o replanificarla) la nueva persona responsable recibe un aviso con tarea, proyecto, quién la asignó y fecha, en la misma transacción que la asignación: si esta falla no queda aviso y un reintento no lo duplica (un aviso por evento del historial). Quien se asigna a sí mismo no recibe aviso. Vista "Avisos" (`g a`) — `GET /api/avisos` |
+| 4 | HU-06-003 | Al registrar un bloqueo, el responsable del proyecto recibe un aviso con la tarea y el motivo, en la misma transacción; un reintento no lo repite y quien reporta su propio bloqueo no se avisa a sí mismo. Al resolverse, el aviso se conserva marcado "Resuelto" |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 

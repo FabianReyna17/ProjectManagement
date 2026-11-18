@@ -1,9 +1,10 @@
-"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001, HU-07-001, HU-07-002, HU-08-002, HU-08-003).
+"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001, HU-06-003, HU-07-001, HU-07-002, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
 Todo cambio del plan queda en el historial con valor anterior, nuevo y actor.
-Cada asignación avisa a la nueva persona responsable en la misma transacción.
+Cada asignación avisa a la nueva persona responsable y cada bloqueo al responsable del
+proyecto, en la misma transacción que el cambio.
 """
 from datetime import date
 from typing import Optional
@@ -255,7 +256,8 @@ def avances(db, tarea: dict) -> list:
 
 
 def registrar_bloqueo(db, tarea: dict, actor_id: int, motivo: str, clave: Optional[str] = None) -> dict:
-    """HU-04-003: abre un bloqueo con motivo, autor y fecha sin cambiar el estado de trabajo."""
+    """HU-04-003: abre un bloqueo con motivo, autor y fecha sin cambiar el estado de trabajo.
+    HU-06-003: avisa al responsable del proyecto; un reintento no repite el aviso."""
     if not _puede_cambiar_estado(tarea, actor_id):
         raise Prohibido(MSG_BLOQUEO_PERMISO)
     if tarea["estado"] == "terminada":
@@ -263,7 +265,9 @@ def registrar_bloqueo(db, tarea: dict, actor_id: int, motivo: str, clave: Option
 
     def insertar() -> int:
         bid = repo.insertar_bloqueo(db, tarea["id"], motivo, actor_id)
-        repo.registrar_cambio(db, tarea["id"], "bloqueo", None, motivo, actor_id)
+        evento = repo.registrar_cambio(db, tarea["id"], "bloqueo", None, motivo, actor_id)
+        avisos.avisar_bloqueo(db, tarea["proyecto_id"], tarea["id"], tarea["proyecto_responsable_id"],
+                              actor_id, evento, bid)
         return bid
 
     try:

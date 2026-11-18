@@ -1,4 +1,4 @@
-"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001, HU-06-003, HU-07-001 a HU-07-003, HU-08-002, HU-08-003).
+"""Reglas de tareas (HU-03-001 a HU-03-006, HU-04-001 a HU-04-005, HU-06-001, HU-06-003, HU-07-001 a HU-07-003, HU-07-005, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para proyectos y cuentas usa sus servicios, nunca sus repositorios.
 Planificar (crear, asignar, fechar) es exclusivo del responsable del proyecto.
@@ -157,6 +157,30 @@ def resumen(db, proyecto: dict) -> dict:
     proximas = sorted((t for t in abiertas if t["fecha_limite"] and t["dias_restantes"] >= 0),
                       key=lambda t: (t["fecha_limite"], t["id"]))[:PROXIMAS]
     return {"total": len(tareas), "abiertas": len(abiertas), "indicadores": indicadores, "proximas": proximas}
+
+
+# HU-07-005: funciones que consultan el estado general (los integrantes ven sus tareas y proyectos)
+FUNCIONES_SUPERVISAN = ("Admin", "Responsable", "Supervisor")
+INDICADORES_ATENCION = ("vencidas", "bloqueadas")
+
+
+def estado_general(db, usuario_id: int, incluir_cerrados: bool = False) -> dict:
+    """HU-07-005: los proyectos en los que participa la persona (los demás ni aparecen ni se
+    cuentan), con las cifras de su resumen (HU-07-003), así que coinciden con la ficha de cada uno.
+    RP-07-03 (propuesta): requiere atención si tiene al menos una tarea vencida o bloqueada.
+    Primero los que requieren atención; después por fecha prevista de término."""
+    filas = []
+    for p in proyectos.mis_proyectos(db, usuario_id):
+        if p["estado"] == "cerrado" and not incluir_cerrados:
+            continue
+        r = resumen(db, p)
+        indicadores = {k: r["indicadores"][k] for k in INDICADORES_ATENCION}
+        filas.append({**p, "total": r["total"], "abiertas": r["abiertas"], "indicadores": indicadores,
+                      "requiere_atencion": any(i["total"] for i in indicadores.values())})
+    filas.sort(key=lambda f: (not f["requiere_atencion"], f["fecha_fin"], f["id"]))
+    totales = {"proyectos": len(filas), "requieren_atencion": sum(f["requiere_atencion"] for f in filas),
+               **{k: sum(f["indicadores"][k]["total"] for f in filas) for k in INDICADORES_ATENCION}}
+    return {"proyectos": filas, "totales": totales}
 
 
 def mis_tareas(db, usuario_id: int) -> list:

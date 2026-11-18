@@ -14,6 +14,7 @@ const rutas = [
   { patron: /^#\/mis-tareas$/, vista: vistaMisTareas, esqueleto: "tabla" },
   { patron: /^#\/avisos$/, vista: vistaAvisos, esqueleto: "tabla" },
   { patron: /^#\/avisos\/(\d+)$/, vista: vistaAbrirAviso, esqueleto: "ficha" },
+  { patron: /^#\/estado-proyectos$/, vista: vistaEstadoProyectos, esqueleto: "tabla" },
   { patron: /^#\/usuarios$/, vista: vistaUsuarios, esqueleto: "tabla" },
   { patron: /^#\/sin-acceso$/, vista: vistaSinAcceso },
 ];
@@ -135,6 +136,7 @@ function marcarSeccion(seccion) {
 function pintarMenusCuenta() {
   const u = API.usuario();
   document.querySelectorAll("[data-solo-admin]").forEach((el) => (el.hidden = u?.funcion !== "Admin"));
+  document.querySelectorAll("[data-supervision]").forEach((el) => (el.hidden = !puedeSupervisar()));  // HU-07-005
   const html = u ? `
     <details class="menu-cuenta">
       <summary aria-label="Cuenta de ${escapar(u.nombre)}">

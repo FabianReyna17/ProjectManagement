@@ -93,6 +93,7 @@ En las plantillas no hay `onclick`: los botones usan `data-accion` (delegación 
 | 4 | HU-05-003 | Sección "Comentarios y archivos" en el proyecto y en la tarea: ambos en una sola lista en orden de publicación, con autor y fecha, filtro Todo / Comentarios / Archivos y los formularios para comentar y adjuntar. Solo muestra lo de ese destino (ni sus tareas ni otros proyectos); reasignar la tarea conserva conversación y archivos — `GET /api/proyectos/{id}/actividad`, `GET /api/tareas/{id}/actividad` |
 | 4 | HU-02-004 | El responsable inicia la ejecución del proyecto (Planificado → En curso) con confirmación; la ficha muestra desde cuándo y quién lo cambió, y el cambio queda en "Cambios del plan". Una transición no permitida o un estado inexistente se rechaza sin tocar el estado; el cierre queda para su propio procedimiento (HU-02-005). Si otra persona cambió el estado mientras tanto → 409 — `PUT /api/proyectos/{id}/estado` |
 | 4 | HU-07-003 | Resumen en la ficha del proyecto: pendientes, en curso, terminadas, vencidas, por vencer y bloqueadas, más las próximas fechas límite. Se calcula sobre la misma lista que el tablero (solo datos confirmados) y cada cifra abre la lista con su filtro; nuevo filtro "Bloqueo" — `GET /api/proyectos/{id}/resumen`, `?bloqueo=bloqueada|sin_bloqueo` |
+| 5 | HU-07-005 | Vista "Estado general" (`g e`, solo Admin, Responsable y Supervisor): cada proyecto en el que la persona participa, con responsable, estado, fecha prevista de término, tareas vencidas y bloqueadas y abiertas. Los que tienen al menos una tarea vencida o bloqueada se marcan "Requiere atención" (propuesta de RP-07-03) y van primero. Las cifras son las del resumen de cada proyecto y cada una abre su lista filtrada; los cerrados se incluyen o excluyen con una casilla y los proyectos sin acceso ni aparecen ni se cuentan — `GET /api/estado-proyectos?incluir_cerrados=` |
 
 Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el historial de la tarea (`GET /api/tareas/{id}/historial`).
 
@@ -123,4 +124,4 @@ Al llegar la historia que lo necesite:
 
 ## Siguientes sprints
 
-Avisos de vencimiento y de cambios del plan, cierre de proyectos, supervisión general, carga por responsable, desactivar cuentas y respaldos.
+Avisos de vencimiento y de cambios del plan, cierre de proyectos, carga por responsable, desactivar cuentas y respaldos.

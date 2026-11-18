@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 
 from ...core.cabeceras import clave_idempotencia
 from ...db.database import get_db
-from ..acceso.deps import usuario_actual
+from ..acceso.deps import requiere_funcion, usuario_actual
 from ..proyectos.deps import proyecto_autorizado
 from . import service
 from .deps import tarea_autorizada
@@ -46,6 +46,12 @@ def tablero_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), u: dict 
 @router.get("/proyectos/{proyecto_id}/resumen")
 def resumen_del_proyecto(proyecto: dict = Depends(proyecto_autorizado), db=Depends(get_db)):
     return service.resumen(db, proyecto)
+
+
+@router.get("/estado-proyectos")
+def estado_de_los_proyectos(incluir_cerrados: bool = False,
+                            u: dict = Depends(requiere_funcion(*service.FUNCIONES_SUPERVISAN)), db=Depends(get_db)):
+    return service.estado_general(db, u["id"], incluir_cerrados)
 
 
 @router.get("/mis-tareas")

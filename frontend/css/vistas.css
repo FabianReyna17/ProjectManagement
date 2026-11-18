@@ -171,6 +171,46 @@
 .lista-proximas { display: grid; gap: var(--e-1); }
 .lista-proximas li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--e-2); }
 
+/* ---------- Estado general de los proyectos (HU-07-005) ---------- */
+
+.casilla { display: inline-flex; align-items: center; gap: var(--e-2); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }
+.casilla input { width: 16px; height: 16px; margin: 0; accent-color: var(--acento); }
+.totales-estado { display: flex; flex-wrap: wrap; gap: var(--e-2); margin-bottom: var(--e-2); }
+.totales-estado li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--e-2);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--r-2);
+  background: var(--superficie);
+  color: var(--texto-2);
+  font-size: var(--t-sm);
+}
+.totales-estado .num { color: var(--texto); font-size: var(--t-lg, 1.25rem); font-weight: var(--peso-fuerte); }
+.totales-estado .con-atencion { border-color: var(--peligro-borde); background: var(--peligro-suave); }
+.totales-estado .con-atencion .num { color: var(--peligro); }
+.nota-estado { margin-bottom: var(--e-4); font-size: var(--t-sm); }
+.chip-atencion { margin-left: var(--e-2); border-color: var(--peligro-borde); background: var(--peligro-suave); color: var(--peligro); }
+.chip-atencion .icono { width: 14px; height: 14px; vertical-align: 0; }
+.fila-atencion > td:first-child { box-shadow: inset 3px 0 0 var(--peligro); }
+.cifra {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  padding: 2px var(--e-2);
+  border: 1px solid var(--peligro-borde);
+  border-radius: var(--r-1);
+  background: var(--peligro-suave);
+  color: var(--peligro);
+  font: inherit;
+  font-weight: var(--peso-medio);
+  cursor: pointer;
+}
+.cifra:hover { text-decoration: underline; }
+.cifra .icono { width: 14px; height: 14px; }
+.cifra-cero { color: var(--texto-2); }
+
 /* ---------- Filtros de tareas (HU-07-002) ---------- */
 
 .filtros-tareas {
@@ -283,6 +323,8 @@
   .tabla-tarjetas, .tabla-tarjetas tbody, .tabla-tarjetas tr { display: block; }
   .tabla-tarjetas tr { padding: var(--e-3); border-bottom: 1px solid var(--borde); }
   .tabla-tarjetas tbody tr:last-child { border-bottom: 0; }
+  .tabla-tarjetas tr.fila-atencion { box-shadow: inset 3px 0 0 var(--peligro); }
+  .tabla-tarjetas .fila-atencion > td:first-child { box-shadow: none; }
   .tabla-tarjetas td {
     display: flex;
     align-items: center;

@@ -75,6 +75,19 @@ def marcar_desactivada(db, usuario_id: int, actor_id: int, ahora: str) -> bool:
     return cur.rowcount > 0
 
 
+def nombre_funcion(db, funcion_id: int) -> Optional[str]:
+    row = uno(db, "SELECT nombre FROM funciones WHERE id = :id", id=funcion_id)
+    return row["nombre"] if row else None
+
+
+def cambiar_funcion(db, usuario_id: int, funcion_id: int) -> bool:
+    """Solo cambia si la cuenta está activa y la función es distinta."""
+    cur = db.execute(text("""UPDATE usuarios SET funcion_id = :f
+                             WHERE id = :id AND activo = 1 AND funcion_id <> :f"""),
+                     {"id": usuario_id, "f": funcion_id})
+    return cur.rowcount > 0
+
+
 def borrar_sesiones_de(db, usuario_id: int) -> None:
     db.execute(text("DELETE FROM sesiones WHERE usuario_id = :u"), {"u": usuario_id})
 

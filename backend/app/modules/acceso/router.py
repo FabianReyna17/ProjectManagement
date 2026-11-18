@@ -5,7 +5,7 @@ from ...core.cabeceras import clave_idempotencia
 from ...db.database import get_db
 from . import service
 from .deps import requiere_funcion, usuario_actual
-from .schemas import LoginIn, UsuarioIn
+from .schemas import FuncionIn, LoginIn, UsuarioIn
 
 router = APIRouter(prefix="/api")
 
@@ -48,8 +48,14 @@ def registrar_usuario(data: UsuarioIn, u: dict = Depends(requiere_funcion("Admin
     return service.registrar_usuario(db, data.usuario, data.nombre, data.password, data.funcion_id, u["id"], clave)
 
 
-# --- Mantenimiento de cuentas (HU-01-009) ---
+# --- Mantenimiento de cuentas (HU-01-008, HU-01-009) ---
 
 @router.post("/usuarios/{usuario_id}/desactivacion", tags=["usuarios"])
 def desactivar_cuenta(usuario_id: int, u: dict = Depends(requiere_funcion("Admin")), db=Depends(get_db)):
     return service.desactivar_cuenta(db, usuario_id, u["id"])
+
+
+@router.put("/usuarios/{usuario_id}/funcion", tags=["usuarios"])
+def cambiar_funcion(usuario_id: int, data: FuncionIn, u: dict = Depends(requiere_funcion("Admin")),
+                    db=Depends(get_db)):
+    return service.cambiar_funcion(db, usuario_id, data.funcion_id, u["id"])

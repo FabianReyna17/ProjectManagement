@@ -1,5 +1,5 @@
 """Pruebas de API del Sprint 6: administración de cuentas, respaldo y release."""
-from .helpers import login
+from .helpers import funcion_id, login
 from .test_sprint2 import crear_tarea, esc  # noqa: F401  (esc es el escenario del Sprint 2)
 
 
@@ -76,3 +76,50 @@ def test_solo_admin_desactiva_y_no_su_propia_cuenta(esc):
     assert esc.c.get("/api/usuarios", headers=esc.ana, params={"todas": 1}).status_code == 403
     assert all(x["activo"] for x in esc.c.get("/api/usuarios", headers=esc.adm, params={"todas": 1}).json())
     assert login(esc.c, "carla", "clave123")  # nada cambió
+
+
+# HU-01-008 Cambiar función de cuenta
+def cambiar_funcion(e, uid, funcion, h=None):
+    return e.c.put(f"/api/usuarios/{uid}/funcion", headers=h or e.adm, json={"funcion_id": funcion_id(e.c, e.adm, funcion)})
+
+
+def nuevo_proyecto(e, h, responsable_id):
+    return e.c.post("/api/proyectos", headers=h, json={
+        "nombre": "Nuevo", "objetivo": "Objetivo", "responsable_id": responsable_id,
+        "fecha_inicio": "2026-11-01", "fecha_fin": "2026-12-01"})
+
+
+def test_la_nueva_funcion_aplica_de_inmediato_con_la_sesion_abierta(esc):
+    assert nuevo_proyecto(esc, esc.beto, esc.beto_id).status_code == 403  # Integrante
+    r = cambiar_funcion(esc, esc.beto_id, "Responsable")
+    assert r.status_code == 200, r.text
+    assert (r.json()["funcion"], r.json()["activo"]) == ("Responsable", True)
+    assert esc.c.get("/api/auth/me", headers=esc.beto).json()["funcion"] == "Responsable"
+    assert nuevo_proyecto(esc, esc.beto, esc.beto_id).status_code == 201  # mismo token
+    # y al quitarla también: ana deja de poder crear proyectos, pero sigue a cargo del suyo
+    assert cambiar_funcion(esc, esc.ana_id, "Integrante").status_code == 200
+    assert nuevo_proyecto(esc, esc.ana, esc.ana_id).status_code == 403
+    assert esc.c.get(f"/api/proyectos/{esc.pid}", headers=esc.ana).json()["responsable_id"] == esc.ana_id
+    assert esc.c.get("/api/funciones", headers=esc.carla).status_code == 403
+    assert cambiar_funcion(esc, esc.carla_id, "Admin").status_code == 200
+    assert esc.c.get("/api/funciones", headers=esc.carla).status_code == 200
+
+
+def test_el_cambio_queda_registrado(esc):
+    cambiar_funcion(esc, esc.beto_id, "Supervisor")
+    assert cambiar_funcion(esc, esc.beto_id, "Supervisor").status_code == 200  # misma función: no registra
+    assert eventos_cuenta(esc.beto_id) == [
+        {"tipo": "funcion", "valor_anterior": "Integrante", "valor_nuevo": "Supervisor", "actor_id": 1}]
+
+
+def test_solo_admin_cambia_funciones_y_nadie_la_propia(esc):
+    assert cambiar_funcion(esc, esc.beto_id, "Admin", esc.ana).status_code == 403   # Responsable
+    assert cambiar_funcion(esc, esc.beto_id, "Admin", esc.beto).status_code == 403  # ni la propia
+    assert cambiar_funcion(esc, 1, "Integrante").status_code == 400                 # el Admin tampoco
+    assert cambiar_funcion(esc, 9999, "Integrante").status_code == 404
+    r = esc.c.put(f"/api/usuarios/{esc.beto_id}/funcion", headers=esc.adm, json={"funcion_id": 999})
+    assert r.status_code == 400
+    desactivar(esc, esc.carla_id)
+    assert cambiar_funcion(esc, esc.carla_id, "Admin").status_code == 409  # cuenta desactivada
+    assert eventos_cuenta(esc.beto_id) == []
+    assert esc.c.get("/api/auth/me", headers=esc.beto).json()["funcion"] == "Integrante"

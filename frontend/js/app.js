@@ -819,7 +819,7 @@ ACCIONES.retirar = async (btn) => {
   if (ok) recargar();
 };
 
-// HU-01-001 Registrar cuenta + HU-01-002 Función inicial + HU-01-009 Desactivar cuenta (solo Admin)
+// HU-01-001 Registrar cuenta + HU-01-002 Función inicial + HU-01-008 Cambiar función + HU-01-009 Desactivar (solo Admin)
 async function vistaUsuarios() {
   if (API.usuario()?.funcion !== "Admin") throw sinAcceso();
   const [funciones, cuentas] = await Promise.all([API.get("/api/funciones"), API.get("/api/usuarios?todas=1")]);
@@ -868,7 +868,12 @@ async function vistaUsuarios() {
                   <tr${x.activo ? "" : ` class="fila-inactiva"`}>
                     <td data-label="Nombre" class="celda-principal" data-orden="${escapar(x.nombre)}">${persona(x.nombre)}</td>
                     <td data-label="Usuario">${escapar(x.usuario)}</td>
-                    <td data-label="Función">${escapar(x.funcion)}</td>
+                    <td data-label="Función" data-orden="${escapar(x.funcion)}">${x.activo && x.id !== yo ? `
+                      <label class="solo-lector" for="funcion-${Number(x.id)}">Función de ${escapar(x.nombre)}</label>
+                      <select id="funcion-${Number(x.id)}" class="select-chico" data-cambiar-funcion="${Number(x.id)}"
+                        data-nombre="${escapar(x.nombre)}" data-actual="${escapar(x.funcion)}">
+                        ${funciones.map((f) => `<option value="${Number(f.id)}" ${f.nombre === x.funcion ? "selected" : ""}>${escapar(f.nombre)}</option>`).join("")}
+                      </select>` : escapar(x.funcion)}</td>
                     <td data-label="Estado" data-orden="${x.activo ? 0 : 1}">${x.activo ? "Activa" : `${etiquetaCuentaDesactivada()}
                       <small class="tenue">${momento(x.desactivado_en)} · ${escapar(x.desactivado_por_nombre || "")}</small>`}</td>
                     <td data-label="Acciones">${x.activo && x.id !== yo
@@ -891,6 +896,37 @@ async function vistaUsuarios() {
         const ok = await guardar(form.querySelector("button.boton"),
           () => API.crear("/api/usuarios", d, clave), `Cuenta «${d.usuario}» registrada`, { form });
         if (ok) recargar();
+      });
+      // HU-01-008: la nueva función aplica de inmediato, aunque la persona tenga la sesión abierta
+      document.getElementById("tabla-usuarios").addEventListener("change", async (e) => {
+        const sel = e.target.closest("[data-cambiar-funcion]");
+        if (!sel) return;
+        const nueva = sel.selectedOptions[0].textContent;
+        const si = await confirmar({
+          titulo: `¿Cambiar la función de ${sel.dataset.nombre}?`,
+          mensaje: `Pasará de ${sel.dataset.actual} a ${nueva}. Sus permisos cambian desde su próxima acción, ` +
+            "aunque tenga la sesión abierta. Sus proyectos y tareas no cambian.",
+          aceptar: "Cambiar función",
+        });
+        const restaurar = () => {
+          [...sel.options].forEach((o) => { o.selected = o.textContent === sel.dataset.actual; });
+        };
+        if (!si) { restaurar(); return; }
+        sel.disabled = true;
+        sel.setAttribute("aria-busy", "true");
+        try {
+          await API.put(`/api/usuarios/${sel.dataset.cambiarFuncion}/funcion`, { funcion_id: Number(sel.value) });
+          toast("Función actualizada", "ok");
+          recargar();
+        } catch (err) {
+          if (err.status === 401) return;
+          restaurar();
+          toast(err.message, "error");
+          if (err.status === 403 || err.status === 409) recargar();
+        } finally {
+          sel.disabled = false;
+          sel.removeAttribute("aria-busy");
+        }
       });
     },
   };

@@ -1,4 +1,4 @@
-"""Reglas de cuentas, funciones y sesiones (HU-01-001 a HU-01-004, HU-01-009).
+"""Reglas de cuentas, funciones y sesiones (HU-01-001 a HU-01-004, HU-01-008 y HU-01-009).
 
 No importa FastAPI: se puede probar sin peticiones HTTP. Abre y cierra la
 transacción; los repositorios no hacen commit.
@@ -139,6 +139,26 @@ def registrar_usuario(db, usuario: str, nombre: str, password: str, funcion_id: 
         raise Conflicto("El identificador de usuario ya existe")
     cuenta = repo.obtener_usuario(db, nuevo_id)
     return {**cuenta, "activo": bool(cuenta["activo"])}
+
+
+def cambiar_funcion(db, usuario_id: int, funcion_id: int, actor_id: int) -> dict:
+    """HU-01-008. Los permisos se leen de la BD en cada petición, así que la nueva función
+    aplica de inmediato, aunque la persona tenga la sesión abierta. Nadie cambia su propia
+    función: así siempre queda al menos un Admin. Elegir la misma función no registra nada."""
+    if usuario_id == actor_id:
+        raise DatosInvalidos("No puedes cambiar tu propia función")
+    nueva = repo.nombre_funcion(db, funcion_id)
+    if not nueva:
+        raise DatosInvalidos("La función seleccionada no existe")
+    cuenta = repo.obtener_cuenta(db, usuario_id)
+    if not cuenta:
+        raise NoEncontrado("La cuenta no existe")
+    if not cuenta["activo"]:
+        raise Conflicto("La cuenta está desactivada: no se puede cambiar su función")
+    with transaccion(db):
+        if repo.cambiar_funcion(db, usuario_id, funcion_id):
+            repo.registrar_evento(db, usuario_id, "funcion", cuenta["funcion"], nueva, actor_id, _texto(_ahora()))
+    return _cuenta(repo.obtener_cuenta(db, usuario_id))
 
 
 # --- Consultas que usan otros módulos (nunca acceden a este repositorio directamente) ---

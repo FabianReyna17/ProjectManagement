@@ -13,3 +13,7 @@ class UsuarioIn(Base):
     nombre: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=6, max_length=100)
     funcion_id: int
+
+
+class FuncionIn(Base):
+    funcion_id: int

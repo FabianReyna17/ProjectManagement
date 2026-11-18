@@ -310,3 +310,80 @@ def test_solo_admin_consulta_o_pide_respaldos(datos):
     assert datos.c.get("/api/respaldos").status_code == 401
     for ruta in (f"/{archivo}", f"/data/respaldos/{archivo}", f"/respaldos/{archivo}"):
         assert datos.c.get(ruta).status_code == 404  # nunca se sirven por HTTP
+
+
+# HU-08-005 Restaurar y verificar recuperación
+def bd_en_uso() -> Path:
+    return Path(os.environ["DATABASE_URL"].removeprefix("sqlite:///"))
+
+
+def test_restaurar_recupera_lo_respaldado_y_documenta_lo_posterior(datos, tmp_path):
+    from app.modules.respaldos.restauracion import comparar, informe, restaurar
+    zip_ = carpeta_respaldos() / respaldar(datos)["archivo"]
+    # trabajo registrado después del respaldo: un proyecto nuevo y un cambio en la tarea existente
+    posterior = nuevo_proyecto(datos, datos.ana, datos.ana_id).json()["id"]
+    assert datos.c.put(f"/api/tareas/{datos.tarea['id']}/estado", headers=datos.beto,
+                       json={"estado": "pendiente"}).status_code == 200
+
+    destino = tmp_path / "prueba-restauracion"
+    r = restaurar(zip_, destino / "gestion.db", destino / "archivos")
+    assert r["segundos"] < 60  # tiempo de recuperación medido (límite propuesto: 1 hora)
+    assert r["version_restaurada"] == r["version_respaldo"] and r["filas"]["proyectos"] == 1
+
+    dif = comparar(bd_en_uso(), destino / "gestion.db")
+    assert dif["proyectos"]["posteriores"] == [posterior] and dif["proyectos"]["iguales"] == 1
+    assert dif["tareas"]["cambiadas"] == [datos.tarea["id"]]
+    assert dif["historial_tareas"]["posteriores"]  # el cambio de estado posterior no está en el respaldo
+    for tabla in ("usuarios", "participantes", "avances", "bloqueos", "comentarios", "archivos", "avisos", "eventos_cuenta"):
+        d = dif[tabla]
+        assert d["iguales"] > 0 and not (d["cambiadas"] or d["solo_restaurada"]), tabla
+    texto = informe(r, dif, limite_seg=3600)
+    assert "cumple" in texto and "| proyectos | 1 | " + str(posterior) in texto
+
+
+def test_la_informacion_restaurada_conserva_relaciones_autoria_y_permisos(datos, tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.modules.respaldos.restauracion import restaurar
+    zip_ = carpeta_respaldos() / respaldar(datos)["archivo"]
+    destino = tmp_path / "prueba-restauracion"
+    restaurar(zip_, destino / "gestion.db", destino / "archivos")
+    pid, tid = datos.pid, datos.tarea["id"]
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(destino / 'gestion.db').as_posix()}")
+    monkeypatch.setenv("ARCHIVOS_DIR", str(destino / "archivos"))
+    from app.main import app
+    with TestClient(app) as c:
+        ana, beto, adm = (login(c, u, p) for u, p in (("ana", "clave123"), ("beto", "clave123"), ("admin", "Admin123!")))
+        assert [p["nombre"] for p in c.get("/api/proyectos", headers=beto).json()] == ["Web"]
+        tarea = c.get(f"/api/tareas/{tid}", headers=ana).json()
+        assert (tarea["proyecto_id"], tarea["responsable_nombre"], tarea["estado"]) == (pid, "Beto", "en_curso")
+        assert [h["actor_nombre"] for h in c.get(f"/api/tareas/{tid}/historial", headers=ana).json()][-1] == "Beto"
+        [com] = c.get(f"/api/proyectos/{pid}/comentarios", headers=ana).json()
+        assert com["autor_nombre"] == "Beto"
+        [arch] = c.get(f"/api/proyectos/{pid}/archivos", headers=ana).json()
+        assert c.get(f"/api/archivos/{arch['id']}/descarga", headers=beto).content == PDF
+        # nadie gana acceso: la función de Admin no da acceso al proyecto y la cuenta desactivada sigue así
+        assert c.get(f"/api/proyectos/{pid}", headers=adm).status_code == 403
+        assert c.post("/api/auth/login", json={"usuario": "carla", "password": "clave123"}).status_code == 401
+        # y se puede seguir trabajando sobre lo restaurado
+        assert c.put(f"/api/tareas/{tid}/estado", headers=beto, json={"estado": "pendiente"}).status_code == 200
+
+
+def test_no_restaura_encima_ni_desde_un_respaldo_danado(datos, tmp_path):
+    from app.modules.respaldos.restauracion import main
+    zip_ = carpeta_respaldos() / respaldar(datos)["archivo"]
+    destino = tmp_path / "prueba"
+    args = [str(zip_), "--bd", str(destino / "gestion.db"), "--archivos", str(destino / "archivos")]
+    assert main(args + ["--comparar-con", str(bd_en_uso()), "--informe", str(destino / "informe.md")]) == 0
+    assert "Comparación con la BD de origen" in (destino / "informe.md").read_text(encoding="utf-8")
+    antes = (destino / "gestion.db").stat().st_mtime_ns
+    assert main(args) == 1  # ya existe: no la pisa sin --forzar
+    assert (destino / "gestion.db").stat().st_mtime_ns == antes
+    assert main(args + ["--forzar"]) == 0
+
+    danado = tmp_path / "danado.zip"
+    danado.write_bytes(zip_.read_bytes()[:-200])
+    otro = tmp_path / "otro"
+    assert main([str(danado), "--bd", str(otro / "gestion.db"), "--archivos", str(otro / "archivos")]) == 1
+    assert not (otro / "gestion.db").exists()

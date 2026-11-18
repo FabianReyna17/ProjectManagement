@@ -43,10 +43,13 @@ def crear_engine(url: str) -> Engine:
     return engine
 
 
-def migrar() -> None:
-    """Aplica las migraciones pendientes (equivale a `alembic upgrade head`)."""
+def migrar(url: str | None = None) -> None:
+    """Aplica las migraciones pendientes (equivale a `alembic upgrade head`).
+    Sin url, a la BD en uso; con url, a otra (p. ej. una restaurada)."""
     cfg = Config(str(BACKEND_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    if url:
+        cfg.attributes["url"] = url
     command.upgrade(cfg, "head")
 
 

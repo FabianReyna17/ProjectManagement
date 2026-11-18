@@ -109,10 +109,33 @@ def borrar_sesiones_de(db, usuario_id: int) -> None:
 
 
 def registrar_evento(db, usuario_id: int, tipo: str, anterior: Optional[str], nuevo: Optional[str],
-                     actor_id: int, ahora: str) -> None:
-    db.execute(text("""INSERT INTO eventos_cuenta (usuario_id, tipo, valor_anterior, valor_nuevo, actor_id, creado_en)
-                       VALUES (:u, :tipo, :anterior, :nuevo, :actor, :ahora)"""),
-               {"u": usuario_id, "tipo": tipo, "anterior": anterior, "nuevo": nuevo, "actor": actor_id, "ahora": ahora})
+                     actor_id: Optional[int], ahora: str, proyecto_id: Optional[int] = None) -> None:
+    """Solo agrega: los eventos del historial de accesos nunca se modifican ni se borran (HU-01-010)."""
+    db.execute(text("""INSERT INTO eventos_cuenta (usuario_id, proyecto_id, tipo, valor_anterior, valor_nuevo,
+                                                   actor_id, creado_en)
+                       VALUES (:u, :p, :tipo, :anterior, :nuevo, :actor, :ahora)"""),
+               {"u": usuario_id, "p": proyecto_id, "tipo": tipo, "anterior": anterior, "nuevo": nuevo,
+                "actor": actor_id, "ahora": ahora})
+
+
+def listar_eventos(db, usuario_id: Optional[int], proyecto_id: Optional[int], limite: int) -> list:
+    """Historial de accesos, del más reciente al más antiguo, filtrado por persona y/o proyecto."""
+    return varios(db, """SELECT e.id, e.tipo, e.valor_anterior, e.valor_nuevo, e.creado_en,
+                                e.usuario_id, u.nombre AS persona_nombre, u.usuario AS persona_usuario,
+                                e.proyecto_id, p.nombre AS proyecto_nombre,
+                                e.actor_id, a.nombre AS actor_nombre
+                         FROM eventos_cuenta e
+                         JOIN usuarios u       ON u.id = e.usuario_id
+                         LEFT JOIN proyectos p ON p.id = e.proyecto_id
+                         LEFT JOIN usuarios a  ON a.id = e.actor_id
+                         WHERE (:u IS NULL OR e.usuario_id = :u) AND (:p IS NULL OR e.proyecto_id = :p)
+                         ORDER BY e.creado_en DESC, e.id DESC LIMIT :n""",
+                  u=usuario_id, p=proyecto_id, n=limite)
+
+
+def listar_proyectos_con_accesos(db) -> list:
+    return varios(db, """SELECT DISTINCT p.id, p.nombre FROM eventos_cuenta e
+                         JOIN proyectos p ON p.id = e.proyecto_id ORDER BY p.nombre""")
 
 
 def listar_usuarios_activos(db) -> list:

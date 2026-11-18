@@ -1,4 +1,4 @@
-"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-02-001 a HU-02-005, HU-08-002, HU-08-003).
+"""Reglas de proyectos y participantes (HU-01-005, HU-01-006, HU-01-010, HU-02-001 a HU-02-005, HU-08-002, HU-08-003).
 
 No importa FastAPI. Para datos de cuentas usa el servicio de acceso, nunca su repositorio.
 """
@@ -11,6 +11,12 @@ from ...db.database import transaccion
 from ...db.idempotencia import crear_una_vez
 from ..acceso import service as acceso
 from . import repository as repo
+
+
+def _dar_acceso(db, proyecto_id: int, usuario_id: int, actor_id: int, detalle: str = "") -> None:
+    """Toda alta de acceso pasa por aquí para quedar en el historial (HU-01-010)."""
+    repo.activar_participante(db, proyecto_id, usuario_id)
+    acceso.registrar_cambio_acceso(db, usuario_id, proyecto_id, True, actor_id, detalle)
 
 
 def mis_proyectos(db, usuario_id: int) -> list:
@@ -44,9 +50,9 @@ def crear(db, actor_id: int, nombre: str, objetivo: str, responsable_id: int,
     def insertar() -> int:
         pid = repo.insertar(db, nombre, objetivo, responsable_id,
                             fecha_inicio.isoformat(), fecha_fin.isoformat(), actor_id)
-        repo.activar_participante(db, pid, responsable_id)
+        _dar_acceso(db, pid, responsable_id, actor_id, "responsable del proyecto")
         if actor_id != responsable_id:
-            repo.activar_participante(db, pid, actor_id)
+            _dar_acceso(db, pid, actor_id, actor_id, "creó el proyecto")
         return pid
 
     return repo.obtener(db, crear_una_vez(db, actor_id, clave, "proyecto", insertar))
@@ -99,7 +105,7 @@ def actualizar(db, proyecto: dict, actor_id: int, nombre: str, objetivo: str, re
                     raise _conflicto(repo.obtener_con_responsable(db, proyecto["id"]), [campo])
                 repo.registrar_cambio(db, proyecto["id"], campo, leido, nuevo, actor_id)
             if not repo.es_participante(db, proyecto["id"], responsable_id):
-                repo.activar_participante(db, proyecto["id"], responsable_id)
+                _dar_acceso(db, proyecto["id"], responsable_id, actor_id, "nuevo responsable del proyecto")
     return ficha(repo.obtener_con_responsable(db, proyecto["id"]), actor_id)
 
 
@@ -186,7 +192,7 @@ def agregar_participante(db, proyecto: dict, actor_id: int, usuario_id: int) -> 
     if repo.es_participante(db, proyecto["id"], usuario_id):
         raise Conflicto("La persona ya participa en el proyecto")
     with transaccion(db):
-        repo.activar_participante(db, proyecto["id"], usuario_id)
+        _dar_acceso(db, proyecto["id"], usuario_id, actor_id)
 
 
 def retirar_participante(db, proyecto: dict, actor_id: int, usuario_id: int) -> None:
@@ -196,3 +202,4 @@ def retirar_participante(db, proyecto: dict, actor_id: int, usuario_id: int) -> 
     with transaccion(db):
         if not repo.retirar_participante(db, proyecto["id"], usuario_id):
             raise NoEncontrado("La persona no participa en el proyecto")
+        acceso.registrar_cambio_acceso(db, usuario_id, proyecto["id"], False, actor_id)

@@ -20,6 +20,7 @@ const rutas = [
   { patron: /^#\/carga(?:\?proyecto=(\d+))?$/, vista: vistaCarga, esqueleto: "tabla" },
   { patron: /^#\/usuarios$/, vista: vistaUsuarios, esqueleto: "tabla" },
   { patron: /^#\/respaldos$/, vista: vistaRespaldos, esqueleto: "tabla" },
+  { patron: /^#\/cambios-acceso(?:\?(usuario|proyecto)=(\d+))?$/, vista: vistaCambiosAcceso, esqueleto: "tabla" },
   { patron: /^#\/sin-acceso$/, vista: vistaSinAcceso },
   { patron: /^#\/cambiar-contrasena$/, vista: vistaCambiarContrasena, aislada: true, esqueleto: "form" },
 ];
@@ -851,6 +852,7 @@ async function vistaUsuarios() {
           <p class="subtitulo" data-conteo="tabla-usuarios" data-total="${total}">${total}</p>
         </div>
         <div class="encabezado-acciones">
+          <a class="boton secundario" href="#/cambios-acceso">${icono("reloj")}Historial de accesos</a>
           <a class="boton secundario" href="#/respaldos">${icono("respaldo")}Respaldos</a>
         </div>
       </header>
@@ -893,13 +895,13 @@ async function vistaUsuarios() {
                       </select>` : escapar(x.funcion)}</td>
                     <td data-label="Estado" data-orden="${x.activo ? 0 : 1}">${x.activo ? "Activa" : `${etiquetaCuentaDesactivada()}
                       <small class="tenue">${momento(x.desactivado_en)} · ${escapar(x.desactivado_por_nombre || "")}</small>`}</td>
-                    <td data-label="Acciones">${x.activo && x.id !== yo
-                      ? `<span class="acciones-fila">
-                           <button type="button" class="boton chico secundario" data-accion="restablecer-acceso"
-                             data-id="${Number(x.id)}" data-nombre="${escapar(x.nombre)}">Restablecer acceso</button>
-                           <button type="button" class="boton chico peligro-suave" data-accion="desactivar-cuenta"
-                             data-id="${Number(x.id)}" data-nombre="${escapar(x.nombre)}">Desactivar</button></span>`
-                      : x.id === yo ? `<span class="tenue">Tu cuenta</span>` : ""}</td>
+                    <td data-label="Acciones"><span class="acciones-fila">${x.activo && x.id !== yo ? `
+                      <button type="button" class="boton chico secundario" data-accion="restablecer-acceso"
+                        data-id="${Number(x.id)}" data-nombre="${escapar(x.nombre)}">Restablecer acceso</button>
+                      <button type="button" class="boton chico peligro-suave" data-accion="desactivar-cuenta"
+                        data-id="${Number(x.id)}" data-nombre="${escapar(x.nombre)}">Desactivar</button>`
+                      : x.id === yo ? `<span class="tenue">Tu cuenta</span>` : ""}
+                      <a class="boton chico secundario" href="#/cambios-acceso?usuario=${Number(x.id)}">Historial</a></span></td>
                   </tr>`).join("")}
               </tbody>
             </table>

@@ -1,4 +1,4 @@
-"""Reglas de cuentas, funciones y sesiones (HU-01-001 a HU-01-004, HU-01-008, HU-01-009 y HU-01-011).
+"""Reglas de cuentas, funciones y sesiones (HU-01-001 a HU-01-004 y HU-01-008 a HU-01-011).
 
 No importa FastAPI: se puede probar sin peticiones HTTP. Abre y cierra la
 transacción; los repositorios no hacen commit.
@@ -163,7 +163,11 @@ def registrar_usuario(db, usuario: str, nombre: str, password: str, funcion_id: 
         raise DatosInvalidos("La función seleccionada no existe")
 
     def insertar() -> int:
-        return repo.insertar_usuario(db, usuario, nombre, hash_password(password), funcion_id)
+        nuevo = repo.insertar_usuario(db, usuario, nombre, hash_password(password), funcion_id)
+        # HU-01-010: el alta queda en el historial en la misma transacción (un reintento no la repite)
+        repo.registrar_evento(db, nuevo, "cuenta_alta", None, repo.nombre_funcion(db, funcion_id),
+                              actor_id, _texto(_ahora()))
+        return nuevo
 
     try:
         nuevo_id = crear_una_vez(db, actor_id, clave, "usuario", insertar)
@@ -211,6 +215,27 @@ def restablecer_acceso(db, usuario_id: int, actor_id: int) -> dict:
         repo.registrar_evento(db, usuario_id, "restablecimiento", None, None, actor_id, _texto(_ahora()))
     INTENTOS.exito(cuenta["usuario"].casefold())  # el freno de intentos no le impide entrar con la nueva
     return {**_cuenta(repo.obtener_cuenta(db, usuario_id)), "password_temporal": temporal}
+
+
+# --- Historial de cambios de acceso (HU-01-010) ---
+
+LIMITE_HISTORIAL = 500
+
+
+def historial_accesos(db, funcion: str, usuario_id: Optional[int] = None, proyecto_id: Optional[int] = None) -> dict:
+    """Altas, retiros y cambios de acceso con persona, actor, fecha y valores. Solo Admin."""
+    if funcion != "Admin":
+        raise Prohibido()
+    eventos = repo.listar_eventos(db, usuario_id, proyecto_id, LIMITE_HISTORIAL)
+    return {"eventos": eventos, "proyectos": repo.listar_proyectos_con_accesos(db), "limite": LIMITE_HISTORIAL}
+
+
+def registrar_cambio_acceso(db, usuario_id: int, proyecto_id: int, alta: bool, actor_id: Optional[int],
+                            detalle: str = "") -> None:
+    """Para el módulo de proyectos: anota un alta o retiro de acceso dentro de SU transacción."""
+    con, sin = "con acceso" + (f" ({detalle})" if detalle else ""), "sin acceso"
+    repo.registrar_evento(db, usuario_id, "acceso_alta" if alta else "acceso_retiro",
+                          sin if alta else con, con if alta else sin, actor_id, _texto(_ahora()), proyecto_id)
 
 
 # --- Consultas que usan otros módulos (nunca acceden a este repositorio directamente) ---

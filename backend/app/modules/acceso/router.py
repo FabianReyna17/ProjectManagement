@@ -1,4 +1,6 @@
 """Endpoints de autenticación y cuentas. Solo validan la entrada y llaman al servicio."""
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 
 from ...core.cabeceras import clave_idempotencia
@@ -71,3 +73,11 @@ def cambiar_funcion(usuario_id: int, data: FuncionIn, u: dict = Depends(requiere
 @router.post("/usuarios/{usuario_id}/restablecimiento", tags=["usuarios"])
 def restablecer_acceso(usuario_id: int, u: dict = Depends(requiere_funcion("Admin")), db=Depends(get_db)):
     return service.restablecer_acceso(db, usuario_id, u["id"])
+
+
+# --- Historial de cambios de acceso (HU-01-010) ---
+
+@router.get("/cambios-acceso", tags=["usuarios"])
+def historial_accesos(usuario_id: Optional[int] = None, proyecto_id: Optional[int] = None,
+                      u: dict = Depends(requiere_funcion("Admin")), db=Depends(get_db)):
+    return service.historial_accesos(db, u["funcion"], usuario_id, proyecto_id)

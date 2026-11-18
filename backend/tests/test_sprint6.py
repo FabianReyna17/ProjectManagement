@@ -17,9 +17,11 @@ def desactivar(e, uid, h=None):
 
 
 def eventos_cuenta(uid):
+    """Cambios sobre la cuenta (sin su alta ni los accesos a proyectos, que se prueban en HU-01-010)."""
     from app.db.database import get_engine, varios
     with get_engine().connect() as db:
-        return varios(db, "SELECT tipo, valor_anterior, valor_nuevo, actor_id FROM eventos_cuenta WHERE usuario_id = :u",
+        return varios(db, """SELECT tipo, valor_anterior, valor_nuevo, actor_id FROM eventos_cuenta
+                             WHERE usuario_id = :u AND tipo IN ('desactivacion', 'funcion', 'restablecimiento')""",
                       u=uid)
 
 
@@ -387,3 +389,101 @@ def test_no_restaura_encima_ni_desde_un_respaldo_danado(datos, tmp_path):
     otro = tmp_path / "otro"
     assert main([str(danado), "--bd", str(otro / "gestion.db"), "--archivos", str(otro / "archivos")]) == 1
     assert not (otro / "gestion.db").exists()
+
+
+# HU-01-010 Historial de cambios de acceso
+def historial(e, h=None, **filtro):
+    r = e.c.get("/api/cambios-acceso", headers=h or e.adm, params=filtro)
+    assert r.status_code == 200, r.text
+    return [(x["tipo"], x["persona_nombre"], x["proyecto_nombre"], x["actor_nombre"], x["valor_anterior"],
+             x["valor_nuevo"]) for x in r.json()["eventos"]]
+
+
+def test_cada_cambio_muestra_persona_actor_fecha_y_valores(esc):
+    assert esc.c.delete(f"/api/proyectos/{esc.pid}/participantes/{esc.beto_id}", headers=esc.ana).status_code == 200
+    cambiar_funcion(esc, esc.beto_id, "Supervisor")
+    desactivar(esc, esc.beto_id)
+    assert historial(esc, usuario_id=esc.beto_id) == [
+        ("desactivacion", "Beto", None, "Administrador", "activa", "desactivada"),
+        ("funcion", "Beto", None, "Administrador", "Integrante", "Supervisor"),
+        ("acceso_retiro", "Beto", "Web", "Ana", "con acceso", "sin acceso"),
+        ("acceso_alta", "Beto", "Web", "Ana", "sin acceso", "con acceso"),
+        ("cuenta_alta", "Beto", None, "Administrador", None, "Integrante"),
+    ]
+    assert historial(esc, proyecto_id=esc.pid) == [
+        ("acceso_retiro", "Beto", "Web", "Ana", "con acceso", "sin acceso"),
+        ("acceso_alta", "Beto", "Web", "Ana", "sin acceso", "con acceso"),
+        ("acceso_alta", "Ana", "Web", "Ana", "sin acceso", "con acceso (responsable del proyecto)"),
+    ]
+    r = esc.c.get("/api/cambios-acceso", headers=esc.adm).json()
+    assert all(x["creado_en"] for x in r["eventos"]) and r["proyectos"] == [{"id": esc.pid, "nombre": "Web"}]
+    # el nuevo responsable que obtiene acceso al editar el proyecto también queda registrado
+    dani = crear_usuario_resp(esc, "dani")
+    p = esc.c.get(f"/api/proyectos/{esc.pid}", headers=esc.ana).json()
+    r = esc.c.put(f"/api/proyectos/{esc.pid}", headers=esc.ana, json={
+        **{k: p[k] for k in ("nombre", "objetivo", "fecha_inicio", "fecha_fin")}, "responsable_id": dani})
+    assert r.status_code == 200, r.text
+    assert historial(esc, usuario_id=dani)[0] == (
+        "acceso_alta", "Dani", "Web", "Ana", "sin acceso", "con acceso (nuevo responsable del proyecto)")
+
+
+def crear_usuario_resp(e, usuario):
+    from .helpers import crear_usuario
+    return crear_usuario(e.c, e.adm, usuario, "Responsable")
+
+
+def test_solo_admin_consulta_el_historial(esc):
+    for h in (esc.ana, esc.beto):  # ni siquiera el responsable del proyecto
+        assert esc.c.get("/api/cambios-acceso", headers=h, params={"proyecto_id": esc.pid}).status_code == 403
+        assert esc.c.get("/api/cambios-acceso", headers=h, params={"usuario_id": esc.beto_id}).status_code == 403
+    assert esc.c.get("/api/cambios-acceso").status_code == 401
+
+
+def test_cambiar_o_desactivar_no_altera_eventos_anteriores(esc):
+    antes = esc.c.get("/api/cambios-acceso", headers=esc.adm).json()["eventos"]
+    cambiar_funcion(esc, esc.beto_id, "Responsable")
+    restablecer(esc, esc.beto_id)
+    desactivar(esc, esc.beto_id)
+    desactivar(esc, esc.beto_id)  # repetir no agrega ni cambia nada
+    despues = esc.c.get("/api/cambios-acceso", headers=esc.adm).json()["eventos"]
+    assert len(despues) == len(antes) + 3 and despues[3:] == antes
+    assert [x["tipo"] for x in despues[:3]] == ["desactivacion", "restablecimiento", "funcion"]
+
+
+def test_la_migracion_carga_los_accesos_anteriores(tmp_path, monkeypatch):
+    """Una BD de antes del historial (0020) obtiene altas de cuenta y de acceso con actor no registrado."""
+    from alembic import command
+    from alembic.config import Config
+
+    from app.db.database import BACKEND_DIR
+    url = f"sqlite:///{(tmp_path / 'vieja.db').as_posix()}"
+    monkeypatch.setenv("DATABASE_URL", url)
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    command.upgrade(cfg, "0020")
+    bd = sqlite3.connect(tmp_path / "vieja.db")
+    bd.executescript("""
+        INSERT INTO usuarios (id, usuario, nombre, password_hash, funcion_id, creado_en)
+            VALUES (1, 'admin', 'Administrador', 'x', 1, '2026-10-01 10:00:00'),
+                   (2, 'ana', 'Ana', 'x', 3, '2026-10-02 10:00:00');
+        INSERT INTO eventos_cuenta (usuario_id, tipo, valor_anterior, valor_nuevo, actor_id, creado_en)
+            VALUES (2, 'funcion', 'Responsable', 'Integrante', 1, '2026-11-01 10:00:00');
+        UPDATE usuarios SET funcion_id = 3 WHERE id = 2;
+        INSERT INTO proyectos (id, nombre, objetivo, responsable_id, fecha_inicio, fecha_fin, creado_por)
+            VALUES (1, 'Web', 'Sitio', 1, '2026-10-01', '2026-12-01', 1);
+        INSERT INTO participantes (proyecto_id, usuario_id, activo, agregado_en, retirado_en)
+            VALUES (1, 1, 1, '2026-10-03 10:00:00', NULL), (1, 2, 0, '2026-10-04 10:00:00', '2026-10-05 10:00:00');
+    """)
+    bd.commit()
+    command.upgrade(cfg, "head")
+    filas = bd.execute("""SELECT usuario_id, proyecto_id, tipo, valor_anterior, valor_nuevo, actor_id, creado_en
+                          FROM eventos_cuenta ORDER BY creado_en, id""").fetchall()
+    bd.close()
+    assert filas == [
+        (1, None, "cuenta_alta", None, "Admin", None, "2026-10-01 10:00:00"),
+        (2, None, "cuenta_alta", None, "Responsable", None, "2026-10-02 10:00:00"),  # su función inicial
+        (1, 1, "acceso_alta", "sin acceso", "con acceso", None, "2026-10-03 10:00:00"),
+        (2, 1, "acceso_alta", "sin acceso", "con acceso", None, "2026-10-04 10:00:00"),
+        (2, 1, "acceso_retiro", "con acceso", "sin acceso", None, "2026-10-05 10:00:00"),
+        (2, None, "funcion", "Responsable", "Integrante", 1, "2026-11-01 10:00:00"),
+    ]

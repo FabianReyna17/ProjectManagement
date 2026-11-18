@@ -7,11 +7,13 @@ from ...db.database import uno, varios
 
 
 def listar_de_participante(db, usuario_id: int) -> list:
+    """HU-02-006: los cerrados traen cuándo y quién los cerró."""
     return varios(db, """SELECT p.id, p.nombre, p.estado, p.fecha_inicio, p.fecha_fin,
-                                 r.nombre AS responsable_nombre
+                                 r.nombre AS responsable_nombre, p.cerrado_en, ce.nombre AS cerrado_por_nombre
                           FROM proyectos p
                           JOIN participantes pa ON pa.proyecto_id = p.id AND pa.usuario_id = :u AND pa.activo = 1
                           JOIN usuarios r ON r.id = p.responsable_id
+                          LEFT JOIN usuarios ce ON ce.id = p.cerrado_por
                           ORDER BY p.id DESC""", u=usuario_id)
 
 

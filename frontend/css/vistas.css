@@ -171,6 +171,11 @@
 .lista-proximas { display: grid; gap: var(--e-1); }
 .lista-proximas li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--e-2); }
 
+/* ---------- Proyectos cerrados e historial (HU-02-006) ---------- */
+
+.pestanas-proyectos, .filtro-historial { margin-bottom: var(--e-4); }
+.lista-historial .valor-anterior { text-decoration: line-through; text-decoration-color: var(--texto-3); }
+
 /* ---------- Cierre del proyecto (HU-02-005) ---------- */
 
 .hoja-ancha { max-width: 860px; }

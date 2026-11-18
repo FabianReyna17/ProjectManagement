@@ -5,11 +5,12 @@ const FUNCIONES_CREAN_PROYECTO = ["Admin", "Responsable"];
 
 const rutas = [
   { patron: /^#\/login$/, vista: vistaLogin, publica: true, esqueleto: "form" },
-  { patron: /^#\/proyectos$/, vista: vistaProyectos, esqueleto: "tabla" },
+  { patron: /^#\/proyectos(?:\?(cerrados))?$/, vista: vistaProyectos, esqueleto: "tabla" },
   { patron: /^#\/proyectos\/nuevo$/, vista: vistaNuevoProyecto, esqueleto: "form" },
   { patron: /^#\/proyectos\/(\d+)$/, vista: vistaProyecto, esqueleto: "ficha" },
   { patron: /^#\/proyectos\/(\d+)\/editar$/, vista: vistaEditarProyecto, esqueleto: "form" },
   { patron: /^#\/proyectos\/(\d+)\/cerrar$/, vista: vistaCerrarProyecto, esqueleto: "form" },
+  { patron: /^#\/proyectos\/(\d+)\/historial$/, vista: vistaHistorialProyecto, esqueleto: "tabla" },
   { patron: /^#\/proyectos\/(\d+)\/tareas\/nueva$/, vista: vistaNuevaTarea, esqueleto: "form" },
   { patron: /^#\/tareas\/(\d+)$/, vista: vistaTarea, esqueleto: "ficha" },
   { patron: /^#\/mis-tareas$/, vista: vistaMisTareas, esqueleto: "tabla" },
@@ -321,15 +322,20 @@ function vistaLogin() {
   };
 }
 
-// HU-01-006 Consultar proyectos autorizados
-async function vistaProyectos() {
+// HU-01-006 Consultar proyectos autorizados · HU-02-006 los cerrados en su propia pestaña
+async function vistaProyectos(verCerrados) {
   const puedeCrear = FUNCIONES_CREAN_PROYECTO.includes(API.usuario()?.funcion);
-  const proyectos = await API.get("/api/proyectos");
-  Estado.proyectos = proyectos;
+  const todos = await API.get("/api/proyectos");
+  Estado.proyectos = todos;
   pintarRecientes();
-  const total = `${proyectos.length} proyecto${proyectos.length === 1 ? "" : "s"}`;
+  const cerrados = todos.filter((p) => p.estado === "cerrado");
+  const activos = todos.filter((p) => p.estado !== "cerrado");
+  const proyectos = verCerrados ? cerrados : activos;
+  const total = `${proyectos.length} proyecto${proyectos.length === 1 ? "" : "s"}${verCerrados ? ` cerrado${proyectos.length === 1 ? "" : "s"}` : ""}`;
+  const pestana = (href, texto, n, actual) => `<a class="boton chico ${actual ? "" : "secundario"}" href="${href}"
+      ${actual ? 'aria-current="page"' : ""}>${texto} <span class="conteo">${n}</span></a>`;
   return {
-    titulo: "Mis proyectos",
+    titulo: verCerrados ? "Proyectos cerrados" : "Mis proyectos",
     seccion: "proyectos",
     nueva: puedeCrear ? "#/proyectos/nuevo" : null,
     textoNueva: "Nuevo proyecto",
@@ -344,15 +350,21 @@ async function vistaProyectos() {
           ${puedeCrear ? `<a class="boton" href="#/proyectos/nuevo">${icono("mas")}Nuevo proyecto</a>` : ""}
         </div>
       </header>
+      ${cerrados.length ? `<nav class="selector-vista pestanas-proyectos" aria-label="Proyectos">
+        ${pestana("#/proyectos", "Activos", activos.length, !verCerrados)}${pestana("#/proyectos?cerrados", "Cerrados", cerrados.length, verCerrados)}
+      </nav>` : ""}
       ${proyectos.length === 0
-        ? (puedeCrear
-          ? vacio("Aún no hay proyectos", "Crea el primero y da acceso a tu equipo.",
+        ? (verCerrados
+          ? vacio("No hay proyectos cerrados", "Cuando el responsable cierre un proyecto en el que participas, podrás consultarlo aquí.")
+          : puedeCrear
+          ? vacio("Aún no hay proyectos activos", "Crea uno y da acceso a tu equipo.",
               `<a class="boton" href="#/proyectos/nuevo">${icono("mas")}Crear proyecto</a>`)
-          : vacio("Aún no participas en ningún proyecto",
+          : vacio("Aún no participas en ningún proyecto activo",
               "Cuando el responsable de un proyecto te dé acceso, aparecerá aquí."))
         : `<div class="tabla-marco">
           <table class="tabla tabla-tarjetas" id="tabla-proyectos">
-            <thead><tr>${th("Nombre", { clase: "col-principal" })}${th("Responsable")}${th("Inicio")}${th("Fin")}${th("Estado")}</tr></thead>
+            <thead><tr>${th("Nombre", { clase: "col-principal" })}${th("Responsable")}${th("Inicio")}${th("Fin")}${
+              verCerrados ? th("Cerrado") : th("Estado")}</tr></thead>
             <tbody>
               ${proyectos.map((p) => `
                 <tr data-href="#/proyectos/${Number(p.id)}">
@@ -360,7 +372,10 @@ async function vistaProyectos() {
                   <td data-label="Responsable" data-orden="${escapar(p.responsable_nombre)}">${persona(p.responsable_nombre)}</td>
                   <td data-label="Inicio" data-orden="${escapar(p.fecha_inicio)}" class="num">${fecha(p.fecha_inicio)}</td>
                   <td data-label="Fin" data-orden="${escapar(p.fecha_fin)}" class="num">${fecha(p.fecha_fin)}</td>
-                  <td data-label="Estado" data-orden="${ORDEN_ESTADO[p.estado] || 9}">${etiquetaProyecto(p.estado)}</td>
+                  ${verCerrados
+                    ? `<td data-label="Cerrado" data-orden="${escapar(p.cerrado_en || "")}">${momento(p.cerrado_en)}
+                         <span class="tenue">· ${escapar(p.cerrado_por_nombre || "—")}</span></td>`
+                    : `<td data-label="Estado" data-orden="${ORDEN_ESTADO[p.estado] || 9}">${etiquetaProyecto(p.estado)}</td>`}
                 </tr>`).join("")}
             </tbody>
           </table>
@@ -460,7 +475,8 @@ async function vistaProyecto(id) {
     seccion: "proyectos",
     nueva: planifica ? nuevaTarea : null,
     textoNueva: `Nueva tarea en «${p.nombre}»`,
-    migas: [{ texto: "Mis proyectos", href: "#/proyectos" }, { texto: p.nombre }],
+    migas: [{ texto: p.estado === "cerrado" ? "Proyectos cerrados" : "Mis proyectos",
+              href: p.estado === "cerrado" ? "#/proyectos?cerrados" : "#/proyectos" }, { texto: p.nombre }],
     html: `
       <header class="encabezado">
         <div>
@@ -540,8 +556,12 @@ async function vistaProyecto(id) {
 
       ${cambios.length ? `
       <section class="bloque" aria-labelledby="titulo-cambios">
-        <h2 class="titulo-seccion" id="titulo-cambios">Cambios del plan <span class="conteo">${cambios.length}</span></h2>
-        <ol class="lista-cambios">${cambios.slice().reverse().map(cambioProyecto).join("")}</ol>
+        <div class="encabezado-seccion">
+          <h2 class="titulo-seccion" id="titulo-cambios">Cambios del plan <span class="conteo">${cambios.length}</span></h2>
+          <a class="boton chico secundario" href="#/proyectos/${p.id}/historial">${icono("reloj")}Ver historial completo</a>
+        </div>
+        <ol class="lista-cambios">${cambios.slice(-RECIENTES_FICHA).reverse().map(cambioProyecto).join("")}</ol>
+        ${cambios.length > RECIENTES_FICHA ? `<p class="tenue">Se muestran los ${RECIENTES_FICHA} más recientes.</p>` : ""}
       </section>` : ""}`,
 
     montar() {
@@ -652,6 +672,53 @@ async function vistaCerrarProyecto(id) {
     },
   };
 }
+
+// ---------- HU-02-006 Historial del proyecto ----------
+
+const RECIENTES_FICHA = 5;
+// Grupos para filtrar el historial (las fechas de inicio y fin van juntas)
+const GRUPOS_HISTORIAL = { estado: "Estado", responsable_id: "Responsable", fechas: "Fechas", objetivo: "Objetivo", nombre: "Nombre" };
+const grupoCambio = (campo) => (campo.startsWith("fecha_") ? "fechas" : campo);
+
+async function vistaHistorialProyecto(id) {
+  const [p, cambios] = await Promise.all([API.get(`/api/proyectos/${id}`), API.get(`/api/proyectos/${id}/historial`)]);
+  const cuenta = {};
+  cambios.forEach((h) => (cuenta[grupoCambio(h.campo)] = (cuenta[grupoCambio(h.campo)] || 0) + 1));
+  return {
+    titulo: `Historial · ${p.nombre}`,
+    seccion: "proyectos",
+    migas: [{ texto: "Mis proyectos", href: p.estado === "cerrado" ? "#/proyectos?cerrados" : "#/proyectos" },
+            { texto: p.nombre, href: `#/proyectos/${p.id}` }, { texto: "Historial" }],
+    html: `
+      <header class="encabezado">
+        <div>
+          <div class="titulo-con-chip"><h1 tabindex="-1">Historial del proyecto</h1>${etiquetaProyecto(p.estado)}</div>
+          <p class="subtitulo">${escapar(p.nombre)} · ${cambios.length} cambio${cambios.length === 1 ? "" : "s"} registrado${cambios.length === 1 ? "" : "s"},
+            del más reciente al más antiguo. Cada uno conserva quién lo hizo, cuándo y el valor anterior y el nuevo.</p>
+        </div>
+      </header>
+      ${p.estado === "cerrado" ? bandaCierre(p) : ""}
+      ${cambios.length ? `
+        <div class="selector-vista filtro-historial" role="group" aria-label="Mostrar cambios de">
+          <button type="button" class="boton chico" data-accion="filtrar-historial" data-grupo="" aria-pressed="true">Todos <span class="conteo">${cambios.length}</span></button>
+          ${Object.entries(GRUPOS_HISTORIAL).filter(([g]) => cuenta[g]).map(([g, t]) => `
+            <button type="button" class="boton chico secundario" data-accion="filtrar-historial" data-grupo="${g}" aria-pressed="false">${t} <span class="conteo">${cuenta[g]}</span></button>`).join("")}
+        </div>
+        <ol class="lista-cambios lista-historial">${cambios.slice().reverse().map((h) =>
+          cambioProyecto(h).replace("<li>", `<li data-grupo="${grupoCambio(h.campo)}">`)).join("")}</ol>`
+      : vacio("Sin cambios registrados", "El plan del proyecto no ha cambiado desde que se creó.")}`,
+  };
+}
+
+ACCIONES["filtrar-historial"] = (btn) => {
+  btn.parentElement.querySelectorAll("button").forEach((b) => {
+    b.setAttribute("aria-pressed", b === btn);
+    b.classList.toggle("secundario", b !== btn);
+  });
+  document.querySelectorAll(".lista-historial > li").forEach((li) => {
+    li.hidden = Boolean(btn.dataset.grupo) && li.dataset.grupo !== btn.dataset.grupo;
+  });
+};
 
 // HU-02-003: un cambio del plan con valor anterior, nuevo, actor y fecha
 const CAMPOS_PROYECTO = { nombre: "Nombre", objetivo: "Objetivo", responsable_id: "Responsable",

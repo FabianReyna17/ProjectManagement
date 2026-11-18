@@ -429,3 +429,58 @@ def test_quien_se_cambia_su_propia_tarea_no_se_avisa(esc6):
     assert planificar(esc6, t["id"], "2026-12-01", "baja").status_code == 200
     assert esc6.c.put(f"/api/tareas/{t['id']}/responsable", headers=esc6.ana, json={"usuario_id": esc6.beto_id}).status_code == 200
     assert avisos_tipo(esc6, esc6.ana, "cambio_plan", "reasignacion") == []
+
+
+# HU-02-006 Proyecto cerrado e historial
+def editar_proyecto(e, **cambios):
+    datos = {"nombre": "Web", "objetivo": "Sitio", "responsable_id": e.ana_id,
+             "fecha_inicio": "2026-11-01", "fecha_fin": "2026-12-01", **cambios}
+    r = e.c.put(f"/api/proyectos/{e.pid}", headers=e.ana, json=datos)
+    assert r.status_code == 200, r.text
+
+
+def test_proyecto_cerrado_en_la_lista_con_su_cierre(esc):
+    assert cerrar(esc).status_code == 200
+    for h in (esc.ana, esc.beto):
+        [p] = esc.c.get("/api/proyectos", headers=h).json()
+        assert (p["estado"], p["cerrado_por_nombre"]) == ("cerrado", "Ana") and p["cerrado_en"]
+    assert esc.c.get("/api/proyectos", headers=esc.carla).json() == []
+
+
+def test_historial_completo_que_el_cierre_no_altera(esc):
+    editar_proyecto(esc, objetivo="Sitio con tienda", fecha_fin="2026-12-15")
+    assert esc.c.put(f"/api/proyectos/{esc.pid}/estado", headers=esc.ana, json={"estado": "en_curso"}).status_code == 200
+    antes = esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.beto).json()
+    assert [(h["campo"], h["valor_anterior"], h["valor_nuevo"]) for h in antes] == [
+        ("objetivo", "Sitio", "Sitio con tienda"), ("fecha_fin", "2026-12-01", "2026-12-15"),
+        ("estado", "planificado", "en_curso")]
+    assert all(h["actor_nombre"] == "Ana" and h["creado_en"] for h in antes)
+
+    assert cerrar(esc).status_code == 200
+    despues = esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.beto).json()
+    assert despues[:-1] == antes  # lo anterior queda igual
+    assert (despues[-1]["campo"], despues[-1]["valor_anterior"], despues[-1]["valor_nuevo"]) == ("estado", "en_curso", "cerrado")
+    # el proyecto cerrado ya no admite cambios que alteren su historial
+    r = esc.c.put(f"/api/proyectos/{esc.pid}", headers=esc.ana, json={
+        "nombre": "Web", "objetivo": "Otro", "responsable_id": esc.ana_id,
+        "fecha_inicio": "2026-11-01", "fecha_fin": "2026-12-15"})
+    assert r.status_code == 400
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/historial", headers=esc.ana).json() == despues
+
+
+def test_cerrado_se_consulta_completo_y_sin_acceso_queda_bloqueado(esc):
+    from .test_sprint4 import adjuntar
+    t = crear_tarea(esc, "Diseño", responsable_id=esc.beto_id)
+    adjuntar(esc, f"/api/tareas/{t['id']}", esc.beto)
+    participantes = esc.c.get(f"/api/proyectos/{esc.pid}/participantes", headers=esc.ana).json()
+    assert cerrar(esc, justificacion="Cancelado").status_code == 200
+    # cerrar no concede acceso a nadie más
+    assert esc.c.get(f"/api/proyectos/{esc.pid}/participantes", headers=esc.ana).json() == participantes
+    url = f"/api/proyectos/{esc.pid}"
+    [archivo] = esc.c.get(f"/api/tareas/{t['id']}/archivos", headers=esc.beto).json()
+    consultas = [url, f"{url}/tareas", f"{url}/tablero", f"{url}/resumen", f"{url}/historial", f"{url}/actividad",
+                 f"{url}/archivos", f"/api/tareas/{t['id']}", f"/api/tareas/{t['id']}/historial",
+                 f"/api/archivos/{archivo['id']}/descarga"]
+    for ruta in consultas:
+        assert esc.c.get(ruta, headers=esc.beto).status_code == 200, ruta
+        assert esc.c.get(ruta, headers=esc.carla).status_code == 403, ruta

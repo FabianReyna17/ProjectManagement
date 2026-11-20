@@ -136,7 +136,7 @@ Cada cambio de responsable, fecha, prioridad, estado o bloqueo queda en el histo
 
 ## Pendientes técnicos
 
-Según la propuesta de [arquitectura](docs/Arquitectura_Gestion_Proyectos.md), antes de usar datos reales:
+Según la [arquitectura](docs/Arquitectura_Gestion_Proyectos.md#10-limitaciones-conocidas-y-evolución), antes de usar datos reales:
 
 - Sesión en cookie HttpOnly/Secure/SameSite con protección CSRF y hash del token en BD; hoy el token vive en `localStorage`.
 - Política de hash de contraseñas que guarde algoritmo y costo, con rehash al iniciar sesión.

@@ -1,0 +1,25 @@
+flowchart TB
+    persona["Persona usuaria<br/>computadora o teléfono"]
+    subgraph servidor["Servidor del cliente"]
+        proxy["Entrada HTTPS<br/>IIS / Nginx / Caddy"]
+        subgraph proceso["Proceso Uvicorn · FastAPI (app.main)"]
+            estaticos["Archivos estáticos<br/>frontend/"]
+            api["API REST /api<br/>6 módulos"]
+            ciclos["Ciclos programados<br/>avisos de vencimiento · respaldos"]
+        end
+        bd[("SQLite<br/>data/gestion.db")]
+        adjuntos[["Adjuntos<br/>ARCHIVOS_DIR"]]
+        respaldos[["Respaldos .zip<br/>RESPALDOS_DIR"]]
+        cli["Comandos de operación<br/>app.programado · restauración"]
+    end
+    persona -->|"HTTPS"| proxy
+    proxy --> estaticos
+    proxy -->|"JSON + Bearer token"| api
+    estaticos -.->|"carga la SPA en el navegador"| persona
+    api -->|"SQLAlchemy Core<br/>SQL parametrizado"| bd
+    api -->|"lee y escribe"| adjuntos
+    ciclos --> bd
+    ciclos -->|"zip verificado"| respaldos
+    ciclos -->|"incluye"| adjuntos
+    cli --> bd
+    cli --> respaldos

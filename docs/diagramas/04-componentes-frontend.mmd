@@ -1,0 +1,19 @@
+flowchart TB
+    index["index.html<br/>layout, diálogos y orden de scripts"]
+    subgraph base["Base"]
+        tema["tema.js<br/>claro/oscuro"]
+        api["api.js<br/>cliente HTTP, sesión,<br/>ErrorApi, Idempotency-Key"]
+        ui["ui.js · componentes.js<br/>escape, avisos, formularios,<br/>estados vacíos, iconos"]
+        atajos["atajos.js<br/>paleta Ctrl/⌘ K y atajos g p, g t…"]
+    end
+    subgraph vistas["Vistas por función"]
+        app["app.js<br/>router #/…, login, proyectos,<br/>usuarios, sin acceso"]
+        tareas["tareas.js"]
+        colab["colaboracion.js"]
+        avisos["avisos.js"]
+        sup["supervision.js"]
+        resp["respaldos.js"]
+        adm["administracion.js"]
+    end
+    index --> base --> vistas
+    api -->|"fetch JSON /api"| backend["API"]

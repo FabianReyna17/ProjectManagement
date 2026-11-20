@@ -1,0 +1,9 @@
+flowchart LR
+    usuarios["Navegadores<br/>de la organización"] -->|"HTTPS 443"| proxy["Proxy HTTPS"]
+    subgraph srv["Servidor del cliente (Windows o Linux)"]
+        proxy -->|"http 127.0.0.1:8000"| uv["Servicio Uvicorn<br/>app.main:app · 1 proceso"]
+        uv --> d1[("D:\\…\\datos<br/>gestion.db + archivos")]
+        uv --> d2[("E:\\…\\Respaldos")]
+        tarea["Programador de tareas / cron<br/>opcional"] -.-> uv
+    end
+    monitoreo["Monitoreo"] -->|"GET /api/salud"| proxy

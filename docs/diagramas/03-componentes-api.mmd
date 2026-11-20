@@ -1,0 +1,27 @@
+flowchart TB
+    subgraph main["app/main.py · composición"]
+        errores["Traducción de errores<br/>ErrorNegocio → HTTP"]
+        cab["Middleware de cabeceras<br/>CSP, nosniff, no-cache"]
+        salud["GET /api/salud"]
+    end
+    subgraph modulos["app/modules"]
+        acceso["acceso<br/>login, sesiones, cuentas,<br/>funciones, historial de accesos"]
+        proyectos["proyectos<br/>ficha, participantes,<br/>estados, historial"]
+        tareas["tareas<br/>plan, estados, avances, bloqueos,<br/>tablero, resumen, cierre, supervisión"]
+        avisos["avisos<br/>bandeja, lectura, contador"]
+        colab["colaboracion<br/>comentarios, archivos,<br/>ediciones, actividad"]
+        resps["respaldos<br/>respaldo, registro,<br/>restauración"]
+    end
+    subgraph comun["Compartido"]
+        core["core/<br/>errores, seguridad, freno de intentos,<br/>concurrencia, tiempo, cabeceras"]
+        db["db/<br/>engine, transacción, idempotencia,<br/>migraciones"]
+    end
+    main --> modulos
+    proyectos --> acceso
+    tareas --> proyectos
+    tareas --> avisos
+    colab --> proyectos
+    colab --> tareas
+    modulos --> core
+    modulos --> db
+    db --> sqlite[("SQLite")]

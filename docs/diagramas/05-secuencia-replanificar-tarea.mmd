@@ -1,0 +1,24 @@
+sequenceDiagram
+    actor R as Responsable
+    participant UI as SPA (tareas.js)
+    participant API as Router tareas
+    participant S as Servicio tareas
+    participant BD as SQLite
+    R->>UI: Cambia responsable y fecha y confirma
+    UI->>API: PUT /api/tareas/{id}/plan<br/>{valores nuevos + leídos} · Bearer
+    API->>API: usuario_actual → tarea_autorizada (participa)
+    API->>S: replanificar(tarea, actor, cambios)
+    S->>S: ¿es responsable del proyecto? ¿proyecto abierto?<br/>¿nuevo responsable activo y participante?
+    S->>BD: BEGIN
+    S->>BD: UPDATE tareas SET … WHERE campo IS :leido (por campo)
+    alt Nadie cambió esos datos
+        S->>BD: INSERT historial_tareas (anterior, nuevo, actor, fecha)
+        S->>BD: INSERT avisos (asignación al nuevo, reasignación al anterior)
+        S->>BD: COMMIT
+        S-->>UI: 200 con la tarea actualizada
+        UI-->>R: "Guardado"
+    else Otro lo cambió mientras tanto
+        S->>BD: ROLLBACK
+        S-->>UI: 409 + valor vigente
+        UI-->>R: Avisa el conflicto y conserva lo escrito
+    end

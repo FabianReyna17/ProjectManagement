@@ -1,0 +1,5 @@
+flowchart LR
+    router["router.py<br/>rutas, esquemas Pydantic,<br/>dependencias de permiso"] --> service["service.py<br/>reglas de negocio,<br/>abre y cierra la transacción"]
+    service --> repo["repository.py<br/>SQL parametrizado,<br/>nunca hace commit"]
+    deps["deps.py<br/>usuario_actual,<br/>proyecto_autorizado,<br/>tarea_autorizada"] --> router
+    repo --> bd[("SQLite")]

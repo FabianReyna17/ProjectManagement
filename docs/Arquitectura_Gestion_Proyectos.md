@@ -1,246 +1,314 @@
 # Arquitectura del sistema de gestión de proyectos
 
-**Revisión:** 30 de octubre de 2026. **Estado:** propuesta técnica para discusión del equipo. La arquitectura objetivo todavía no está implementada.
+**Versión del sistema:** 1.0.0 · **Esquema de BD:** migración `0021` · **Estado:** implementada.
 
-> **Estado al Sprint 2 (17 de noviembre de 2026).** El desarrollo sigue esta propuesta. Ya está resuelto: backend separado en los módulos `acceso`, `proyectos` y `tareas` (router → service → repository, con reglas probadas sin HTTP); SQLAlchemy con la transacción en el servicio; migraciones con Alembic (0001–0007) en lugar de `CREATE TABLE IF NOT EXISTS`; sesiones que expiran por inactividad; freno a intentos fallidos de inicio de sesión; idempotencia de las creaciones (HU-08-002) e historial de tareas en la misma transacción; interfaz repartida en varios archivos; 42 pruebas automatizadas en verde. Sigue pendiente lo listado en el README, sección "Pendientes técnicos". Las secciones siguientes conservan el análisis original sobre el código del Sprint 1.
+Este documento describe la arquitectura **tal como está construida** en la versión 1.0, con el modelo C4 (contexto, contenedores, componentes y código), más el despliegue, los mecanismos transversales y las decisiones tomadas. Los diagramas editables están en [`docs/diagramas`](diagramas).
 
-La base actual permite demostrar el primer recorrido de acceso y proyectos. Para convertirla en un producto mantenible recomiendo un **monolito modular con FastAPI**, reglas de negocio separadas de HTTP y persistencia, migraciones y un despliegue reproducible. El mayor beneficio inmediato es poder añadir tareas, historial y avisos sin repartir las mismas reglas entre varias rutas y pantallas.
+## 0. Resumen
 
-Se revisaron el código del Sprint 1, las pruebas existentes, el flujo de GitHub Actions, README, descripción general en Word, épicas, story mapping, planificación y las dos fotografías. Los documentos de producto se presentan como propuestas pendientes de validación; no equivalen a acuerdos comerciales. Las anotaciones de las fotos se consideran evidencia de requisitos, no instrucciones para ejecutar acciones.
+- **Estilo:** monolito modular. Un solo proceso de Python (FastAPI sobre Uvicorn) sirve la API REST y la interfaz web, y además corre los procesos programados (avisos de vencimiento y respaldos).
+- **Datos:** una base SQLite por cliente, con el esquema versionado por migraciones de Alembic. Los adjuntos se guardan en disco, fuera del código, y los respaldos en otra carpeta (en producción, otro disco).
+- **Interfaz:** HTML, CSS y JavaScript sin frameworks ni paso de build. Es una aplicación de una sola página con rutas `#/…` que habla con la API en JSON por el mismo origen.
+- **Organización interna:** seis módulos de negocio (`acceso`, `proyectos`, `tareas`, `avisos`, `colaboracion`, `respaldos`), cada uno con capas `router → service → repository`.
+- **Entrega:** single-tenant. Cada cliente tiene su propia instalación y su propia base.
 
-## 1. Requisitos de entrega y evidencia disponible
-
-La segunda foto permite leer proyecto base «Hello World», Git funcionando, arquitectura, historias definidas y organización de historias. En la primera se distinguen estructura del proyecto, pruebas automatizadas, GitHub Actions, arquitectura base con referencia a C4 y completar dos historias. Hay trazos borrosos: no se puede asegurar la redacción exacta ni interpretar las marcas por grupo como fechas o criterios para este equipo.
-
-| Elemento observado | Evidencia local | Qué falta para demostrarlo |
-| --- | --- | --- |
-| Proyecto base ejecutable | `backend/app/main.py` monta la API y sirve el frontend | Arranque desde instalación limpia y demostración en navegador |
-| Git funcionando | Repositorio con commits de primera iteración y documentación | Verificar que el remoto contiene lo que se presentará; no se inspeccionó el servidor remoto |
-| Estructura y arquitectura | Carpetas backend/frontend; este documento incluye estado actual y propuesta | Explicar responsabilidades y distinguir componentes actuales de futuros |
-| Historias definidas y organizadas | Ocho épicas, 48 HU y planificación de seis sprints | Validar prioridades con cliente y actualizar el estado de cada historia |
-| Pruebas automatizadas y GitHub Actions | Ocho pruebas en `backend/tests/test_sprint1.py`; `.github/workflows/ci.yml` ejecuta pytest | Adjuntar una ejecución verde de CI; su existencia no prueba que haya pasado |
-| Completar dos historias | HU-01-003 iniciar sesión y HU-02-001 crear proyecto tienen rutas, interfaz y pruebas asociadas | Demostrar criterios de ambas y registrar resultado de pruebas; login de cuenta inactiva no tiene caso explícito |
-
-El código cubre más de dos historias, pero no se debe presentar una historia como terminada solo por tener un endpoint. La definición de terminado exige criterios, pruebas, revisión e integración. El encabezado del story mapping dice «aún no implementadas», mientras README describe cobertura del Sprint 1: conviene registrar estado por HU y evidencia sin confundir implementación con aprobación del cliente.
-
-## 2. Arquitectura actual
-
-```mermaid
-flowchart TB
-    persona["Persona en navegador"] --> interfaz["HTML, CSS y JavaScript<br/>app.js concentra rutas y vistas"]
-    subgraph aplicacion["Un proceso FastAPI"]
-        estaticos["StaticFiles sirve el frontend"]
-        rutas["Routers auth, usuarios y proyectos<br/>HTTP + reglas + SQL"]
-        permisos["deps.py<br/>sesión y permisos"]
-        inicio["database.py<br/>conexión, esquema y administrador inicial"]
-    end
-    estaticos --> interfaz
-    interfaz -->|"JSON /api"| rutas
-    rutas --> permisos
-    rutas -->|"sqlite3"| bd[("SQLite local")]
-    permisos --> bd
-    inicio --> bd
-```
-
-Hay decisiones que conviene conservar: SQL parametrizado, claves foráneas activadas por conexión, validación Pydantic, contraseña con sal y comparación resistente a diferencias de tiempo, tokens aleatorios y cierre de sesión en servidor. La autorización consulta cuenta y función en cada petición, y restringe proyectos por participación incluso al administrador. Crear proyecto y participantes se confirma con un único commit. La interfaz distingue error de guardado y usa una función de escape para muchos textos.
-
-### Hallazgos concretos
-
-Prioridad A significa atender antes de usar datos reales; B, resolver al introducir la función que depende de ello.
-
-| Prioridad | Evidencia en el código | Consecuencia y mejora |
-| --- | --- | --- |
-| A | `database.py:67–82` crea `admin / Admin123!` al iniciar si no hay cuentas | Una instalación nueva tiene una credencial conocida. Separar datos de demostración y aprovisionamiento seguro del primer administrador; producción debe rechazar ese arranque inseguro |
-| A | `sesiones` solo tiene token, usuario y creación; `deps.py:28` no comprueba vencimiento; `api.js:3–8` guarda token en localStorage | Sesiones sin caducidad y secreto accesible a JavaScript. Proponer sesión opaca en cookie HttpOnly/Secure/SameSite con protección CSRF y expiración en servidor; almacenar un hash del token |
-| A | `security.py:5–20` usa PBKDF2-SHA256 con 100 000 iteraciones y formato que no guarda algoritmo/coste | Actualizar la política de hash y conservar compatibilidad con los hashes existentes. Rehash al autenticar con éxito; no basta con cambiar la constante |
-| A | `database.py` usa `CREATE TABLE IF NOT EXISTS`; `main.py:16–18` lo ejecuta al arrancar | Crear tablas no actualiza esquemas existentes. Incorporar migraciones versionadas, ejecutadas como paso de despliegue, y probar actualización con datos |
-| A | No hay procedimiento de respaldo/restauración ni configuración de operación en el repositorio | Incorporar ambos antes del primer piloto con datos reales; no esperar al último sprint para poder recuperar trabajo |
-| B | `routers/proyectos.py` y `routers/usuarios.py` contienen reglas, SQL y commits | Extraer casos de uso y repositorios. Las reglas deben poder probarse sin una petición HTTP |
-| B | `_agregar_participante`, `proyectos.py:9–15`, sustituye fechas al reactivar | La fila representa el acceso vigente, no un historial completo. Guardar eventos de alta, retiro y reincorporación en la misma transacción |
-| B | `schemas.py` aplica `str_strip_whitespace=True` a todos los textos, incluidas contraseñas | La API transforma silenciosamente la contraseña. Separar validación de identificadores y secretos; preservar el valor exacto del secreto |
-| B | `frontend/js/app.js` concentra navegación, formularios, acceso y renderizado | Separar vistas por función y componentes compartidos antes de añadir tablero y tareas |
-| B | Listados de proyectos y usuarios no tienen paginación | Definir tamaños máximos, filtros e índices con consultas y volumen reales; no cargar todos los usuarios para cualquier selector |
-| B | `app.js:38–43` ignora errores de logout y borra la sesión local | Si falla la comunicación, el token puede seguir válido en servidor. Informar el cierre incompleto y apoyarse en revocación y vencimiento |
-
-Las recomendaciones sobre cookies, expiración y exposición de tokens se apoyan en [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html). Para contraseñas, [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) recomienda Argon2id y publica parámetros para PBKDF2; el coste debe medirse en el equipo de despliegue. Estos hallazgos proceden de lectura de código, no de una auditoría de penetración.
-
-## 3. Decisión de arquitectura y límites
-
-La propuesta mantiene una aplicación y una base de datos por cliente para la primera venta. Es un supuesto de diseño, pendiente de confirmar. Con tres desarrolladores previstos en la planificación, un monolito modular permite entregas pequeñas y transacciones sencillas. Los módulos son límites internos de código; no implican servidores separados.
-
-FastAPI ya ofrece routers e inyección de dependencias para componer aplicaciones por módulos; la separación adicional de servicios y repositorios es una decisión de este proyecto, no una exigencia del framework. Véase [aplicaciones grandes en FastAPI](https://fastapi.tiangolo.com/tutorial/bigger-applications/).
-
-La entrega académica puede continuar con SQLite. Para el piloto comercial propongo PostgreSQL si se confirma escritura concurrente, varios procesos o mayor necesidad operativa. SQLite también puede servir una aplicación web pequeña: no se ha medido saturación y no hay evidencia de un problema de rendimiento actual. Su documentación describe el límite de un escritor simultáneo y los criterios para elegir una base cliente/servidor: [usos apropiados de SQLite](https://www.sqlite.org/whentouse.html).
-
-No propongo añadir microservicios, Kubernetes, Redis, un bus de eventos ni reescribir toda la interfaz en esta etapa. Se reevaluarán solo ante una necesidad medida. El frontend puede seguir en JavaScript, dividido en módulos ES; adoptar otro framework requiere valorar experiencia del equipo, alcance y coste de migración.
-
-Si la intención comercial pasa a ser una plataforma compartida por varias empresas, deberá abrirse una decisión nueva: aislamiento por organización en autenticación, consultas, relaciones, índices únicos, archivos, trabajos y respaldos, con pruebas de acceso cruzado. Añadir únicamente `organizacion_id` no resuelve ese aislamiento.
-
-## 4. Vista de contexto y despliegue propuesto
-
-La persona utiliza un sistema web de gestión; los servicios de archivos y respaldos son infraestructura del producto. No se presupone correo externo, portal de clientes ni integraciones, pues el alcance todavía no los confirma.
-
-Vista de contexto del sistema, correspondiente al nivel 1 de C4:
+## 1. Contexto (C4 nivel 1)
 
 ```mermaid
 flowchart LR
-    administrador["Administrador<br/>habilita cuentas y funciones"] --> sistema["Sistema de gestión de proyectos<br/>planifica, coordina y conserva el trabajo"]
-    responsable["Responsable de proyecto<br/>organiza y da seguimiento"] --> sistema
-    integrante["Integrante<br/>consulta y actualiza su trabajo"] --> sistema
-    supervisor["Supervisor<br/>consulta proyectos autorizados"] --> sistema
+    admin["Administrador<br/>cuentas, funciones, accesos y respaldos"]
+    resp["Responsable de proyecto<br/>planifica, asigna, resuelve bloqueos y cierra"]
+    integ["Integrante<br/>actualiza sus tareas, avances y bloqueos"]
+    sup["Supervisor<br/>consulta estado general y carga"]
+    sistema["Sistema de gestión de proyectos<br/>v1.0 · single-tenant"]
+    disco[("Almacenamiento de respaldos<br/>otro disco del servidor")]
+    ti["TI del cliente<br/>instala, actualiza y monitorea"]
+    admin --> sistema
+    resp --> sistema
+    integ --> sistema
+    sup --> sistema
+    sistema -->|"copia .zip verificada"| disco
+    ti -->|"servicio, variables, /api/salud"| sistema
 ```
 
-Vista simplificada de contenedores de destino, correspondiente al nivel 2 de C4:
+| Función | Qué puede hacer |
+|---|---|
+| **Admin** | Todo lo de Responsable. Además administra cuentas (registrar, cambiar función, desactivar, restablecer acceso), consulta el historial de accesos y gestiona los respaldos. |
+| **Responsable** | Crea proyectos. En los proyectos a su cargo da y retira acceso, crea y planifica tareas, resuelve bloqueos, edita el proyecto, inicia la ejecución y lo cierra. Ve el estado general y la carga. |
+| **Integrante** | En los proyectos donde participa: cambia el estado de sus tareas, registra avances y bloqueos, comenta y adjunta archivos. |
+| **Supervisor** | Consulta los proyectos donde participa, el estado general y la carga por responsable. |
+
+En todos los casos el acceso a un proyecto depende de **participar** en él, incluso para el Admin. No hay registro abierto: las cuentas las crea el Admin (HU-01-001), y la primera cuenta `admin` se crea al instalar con `ADMIN_PASSWORD_INICIAL`, con cambio obligatorio en el primer ingreso. El sistema no tiene integraciones externas: los avisos se ven dentro de la aplicación y no se envía correo.
+
+## 2. Contenedores (C4 nivel 2)
 
 ```mermaid
 flowchart TB
-    persona["Responsable, integrante, administrador o supervisor"]
-    persona -->|"HTTPS"| entrada["Entrada HTTPS<br/>plataforma de alojamiento o proxy"]
-    entrada --> web["Interfaz modular<br/>HTML, CSS y JavaScript"]
-    entrada -->|"/api"| api["API FastAPI<br/>monolito modular"]
-    web -->|"JSON por el mismo origen HTTPS"| entrada
-    api --> datos[("Base de datos del cliente<br/>PostgreSQL propuesto para piloto")]
-    api -.->|"al incorporar adjuntos"| archivos["Almacenamiento privado<br/>archivos fuera del directorio público"]
-    proceso["Proceso programado<br/>al incorporar recordatorios"] -.-> datos
-    respaldo["Proceso de respaldo"] -->|"lee datos y archivos"| datos
-    respaldo --> archivos
-    respaldo --> copias["Copias protegidas<br/>fuera del servidor principal"]
-    api --> logs["Registros y métricas operativas"]
+    persona["Persona usuaria<br/>computadora o teléfono"]
+    subgraph servidor["Servidor del cliente"]
+        proxy["Entrada HTTPS<br/>IIS / Nginx / Caddy"]
+        subgraph proceso["Proceso Uvicorn · FastAPI (app.main)"]
+            estaticos["Archivos estáticos<br/>frontend/"]
+            api["API REST /api<br/>6 módulos"]
+            ciclos["Ciclos programados<br/>avisos de vencimiento · respaldos"]
+        end
+        bd[("SQLite<br/>data/gestion.db")]
+        adjuntos[["Adjuntos<br/>ARCHIVOS_DIR"]]
+        respaldos[["Respaldos .zip<br/>RESPALDOS_DIR"]]
+        cli["Comandos de operación<br/>app.programado · restauración"]
+    end
+    persona -->|"HTTPS"| proxy
+    proxy --> estaticos
+    proxy -->|"JSON + Bearer token"| api
+    estaticos -.->|"carga la SPA en el navegador"| persona
+    api -->|"SQLAlchemy Core<br/>SQL parametrizado"| bd
+    api -->|"lee y escribe"| adjuntos
+    ciclos --> bd
+    ciclos -->|"zip verificado"| respaldos
+    ciclos -->|"incluye"| adjuntos
+    cli --> bd
+    cli --> respaldos
 ```
 
-Los diagramas documentan relaciones; no certifican despliegue ni alta disponibilidad. La entrada HTTPS puede venir del alojamiento; no requiere comprar un servicio adicional. Inicialmente FastAPI puede seguir sirviendo los archivos estáticos. La base y el almacenamiento privado no se exponen directamente al navegador.
+| Contenedor | Tecnología | Responsabilidad |
+|---|---|---|
+| **Aplicación web (SPA)** | HTML, CSS y JavaScript con scripts clásicos | Pantallas, navegación por `#/rutas`, formularios con confirmación de guardado, tema claro/oscuro, paleta de comandos (Ctrl/⌘ K) y atajos. Corre en el navegador. |
+| **API REST** | Python 3.11 · FastAPI · Pydantic | Autenticación, permisos, reglas de negocio, transacciones e historial. Expone `/api/*` y `/api/salud`. |
+| **Ciclos programados** | Tareas `asyncio` dentro del mismo proceso | Aviso de vencimiento cercano cada `AVISOS_CADA_MIN` (60). Revisa cada hora si toca respaldar (`RESPALDO_CADA_HORAS`, 24). |
+| **Base de datos** | SQLite con claves foráneas activas · Alembic | Toda la información del negocio, el historial y el registro de respaldos. |
+| **Adjuntos** | Carpeta en disco | Contenido de los archivos, con nombre interno aleatorio. Nunca se sirve como estático: solo se descarga por la API, comprobando el acceso. |
+| **Respaldos** | Carpeta en otro disco | `.zip` con la copia consistente de la BD, los adjuntos y un manifiesto. No se sirve por HTTP. |
+| **Comandos de operación** | `python -m app.programado [respaldo]` y `python -m app.modules.respaldos.restauracion` | Ejecutar avisos o respaldos desde el Programador de tareas y restaurar un respaldo. |
 
-Líneas discontinuas indican capacidades de sprints posteriores. Los respaldos son requisito antes de datos reales e incluyen base y adjuntos cuando existan. Un servidor único es aceptable para un piloto con disponibilidad acordada, pero su caída afecta la aplicación; la alta disponibilidad depende del compromiso y presupuesto del cliente.
+**Comunicación:**
+- El navegador pide la SPA y la API al **mismo origen**, así que no hay CORS. Cada petición a la API lleva `Authorization: Bearer <token>`.
+- Las creaciones llevan además `Idempotency-Key` y las ediciones mandan los valores que se leyeron.
+- La API responde JSON. Los errores siempre tienen la forma `{"detail": "...", ...}` con su código: 400 datos inválidos, 401 sin sesión, 403 sin permiso, 404 no existe, 409 conflicto.
+- La base y las carpetas de datos nunca están expuestas al navegador.
 
-## 5. Organización interna propuesta
+## 3. Componentes (C4 nivel 3)
 
-| Módulo | Responsabilidad y datos que administra | Trazabilidad |
-| --- | --- | --- |
-| Acceso | Cuentas, funciones, autenticación y sesiones; permisos generales | EP-01 |
-| Proyectos | Ficha, ciclo de vida, responsable y participación | EP-02; HU-01-005 y HU-01-006 |
-| Tareas | Asignación, estados, avances y bloqueos | EP-03 y EP-04 |
-| Colaboración | Comentarios y metadatos de archivos; descarga autorizada | EP-05 |
-| Notificaciones | Avisos, lectura y recordatorios sin duplicados | EP-06 |
-| Reportes | Consultas e indicadores sobre datos autorizados; sin segundo estado de tareas | EP-07 |
-| Infraestructura compartida | Configuración, persistencia, transacciones, auditoría, registros y recuperación | EP-08 y controles transversales |
+### 3.1 API (backend)
 
 ```mermaid
 flowchart TB
-    ruta["API del módulo<br/>entrada, respuesta y códigos HTTP"] --> servicio["Servicio o caso de uso<br/>coordina operación y transacción"]
-    servicio --> reglas["Reglas y políticas<br/>permisos, estados e invariantes"]
-    servicio --> repo["Repositorio del módulo<br/>consultas y persistencia"]
-    repo --> db[("Base de datos compartida")]
-    servicio --> auditoria["Registro de cambios<br/>misma transacción"]
-    auditoria --> db
+    subgraph main["app/main.py · composición"]
+        errores["Traducción de errores<br/>ErrorNegocio → HTTP"]
+        cab["Middleware de cabeceras<br/>CSP, nosniff, no-cache"]
+        salud["GET /api/salud"]
+    end
+    subgraph modulos["app/modules"]
+        acceso["acceso<br/>login, sesiones, cuentas,<br/>funciones, historial de accesos"]
+        proyectos["proyectos<br/>ficha, participantes,<br/>estados, historial"]
+        tareas["tareas<br/>plan, estados, avances, bloqueos,<br/>tablero, resumen, cierre, supervisión"]
+        avisos["avisos<br/>bandeja, lectura, contador"]
+        colab["colaboracion<br/>comentarios, archivos,<br/>ediciones, actividad"]
+        resps["respaldos<br/>respaldo, registro,<br/>restauración"]
+    end
+    subgraph comun["Compartido"]
+        core["core/<br/>errores, seguridad, freno de intentos,<br/>concurrencia, tiempo, cabeceras"]
+        db["db/<br/>engine, transacción, idempotencia,<br/>migraciones"]
+    end
+    main --> modulos
+    proyectos --> acceso
+    tareas --> proyectos
+    tareas --> avisos
+    colab --> proyectos
+    colab --> tareas
+    modulos --> core
+    modulos --> db
+    db --> sqlite[("SQLite")]
 ```
 
-Una estructura de destino posible, creada gradualmente, es:
+Cada módulo sigue las mismas capas:
+
+```mermaid
+flowchart LR
+    router["router.py<br/>rutas, esquemas Pydantic,<br/>dependencias de permiso"] --> service["service.py<br/>reglas de negocio,<br/>abre y cierra la transacción"]
+    service --> repo["repository.py<br/>SQL parametrizado,<br/>nunca hace commit"]
+    deps["deps.py<br/>usuario_actual,<br/>proyecto_autorizado,<br/>tarea_autorizada"] --> router
+    repo --> bd[("SQLite")]
+```
+
+| Capa | Hace | No hace |
+|---|---|---|
+| **router** | Define las rutas, valida la entrada con Pydantic, inyecta la sesión y el recurso autorizado y llama al servicio. | No contiene reglas ni SQL. |
+| **service** | Aplica permisos y reglas (transiciones de estado, bloqueos, cierre), abre la transacción con `transaccion(db)`, escribe el historial y genera los avisos en la misma transacción. Lanza `ErrorNegocio` sin saber de HTTP. | No arma respuestas HTTP. |
+| **repository** | Ejecuta las consultas con SQLAlchemy Core y SQL parametrizado. Hace los `UPDATE` condicionales para la concurrencia. | Nunca confirma (`commit`). |
+| **deps** | Cadena de autorización. `sesion_actual` valida el token; `usuario_actual` además exige no tener cambio de contraseña pendiente; `proyecto_autorizado` y `tarea_autorizada` exigen participación activa (si no, 403). | — |
+
+| Módulo | Tablas principales | Épicas |
+|---|---|---|
+| `acceso` | `usuarios`, `funciones`, `sesiones`, `eventos_cuenta` | EP-01 |
+| `proyectos` | `proyectos`, `participantes`, `historial_proyectos` | EP-02, HU-01-005/006 |
+| `tareas` | `tareas`, `historial_tareas`, `avances`, `bloqueos` | EP-03, EP-04, EP-07 |
+| `avisos` | `avisos` | EP-06 |
+| `colaboracion` | `comentarios`, `ediciones_comentario`, `archivos` | EP-05 |
+| `respaldos` | `respaldos` | HU-08-004/005 |
+| `db/idempotencia` | `claves_idempotencia` | HU-08-002 |
+
+### 3.2 Aplicación web (frontend)
+
+```mermaid
+flowchart TB
+    index["index.html<br/>layout, diálogos y orden de scripts"]
+    subgraph base["Base"]
+        tema["tema.js<br/>claro/oscuro"]
+        api["api.js<br/>cliente HTTP, sesión,<br/>ErrorApi, Idempotency-Key"]
+        ui["ui.js · componentes.js<br/>escape, avisos, formularios,<br/>estados vacíos, iconos"]
+        atajos["atajos.js<br/>paleta Ctrl/⌘ K y atajos g p, g t…"]
+    end
+    subgraph vistas["Vistas por función"]
+        app["app.js<br/>router #/…, login, proyectos,<br/>usuarios, sin acceso"]
+        tareas["tareas.js"]
+        colab["colaboracion.js"]
+        avisos["avisos.js"]
+        sup["supervision.js"]
+        resp["respaldos.js"]
+        adm["administracion.js"]
+    end
+    index --> base --> vistas
+    api -->|"fetch JSON /api"| backend["API"]
+```
+
+- **Router por hash:** `app.js` tiene la tabla de rutas (`#/proyectos`, `#/proyectos/{id}`, `#/tareas/{id}`, `#/mis-tareas`, `#/avisos`, `#/estado-proyectos`, `#/carga`, `#/usuarios`, `#/respaldos`, `#/cambios-acceso`, `#/cambiar-contrasena`, `#/sin-acceso`). Sin token redirige al login y recuerda la ruta. Con contraseña temporal solo deja ver "Cambiar contraseña".
+- **Cliente HTTP (`api.js`):** agrega el token y traduce un 401 a "sesión perdida" (vuelve al login con el motivo) y un 403 a la pantalla "Sin acceso". Expone el valor vigente cuando la API responde 409.
+- **Sin código en línea:** no hay `onclick` ni estilos en línea. Los botones usan `data-accion` con delegación de eventos, lo que permite una CSP estricta (`script-src 'self'`).
+- **Confirmación honesta (HU-08-001):** la interfaz dice "guardado" solo cuando el servidor respondió OK. Si falla la conexión, avisa que no se guardó nada y conserva lo escrito.
+- **Responsive:** las tablas se convierten en tarjetas en el teléfono. Las pruebas E2E comprueban que no haya desbordes.
+
+## 4. Código (C4 nivel 4): estructura del repositorio
 
 ```text
 backend/
   app/
-    main.py                       # compone la aplicación
-    core/                         # configuración, seguridad y errores comunes
-    infrastructure/               # conexión, transacciones y almacenamiento
+    main.py              # compone la app: routers, errores, cabeceras, /api/salud, estáticos, ciclos
+    programado.py        # ciclos de avisos y respaldos (también se corren por comando)
+    core/                # errors, security, intentos, concurrencia, tiempo, cabeceras, schemas
+    db/                  # database (engine, transaccion, migrar, admin inicial), idempotencia
     modules/
-      acceso/                     # api, schemas, service y repository
-      proyectos/                  # api, schemas, service, policies y repository
-      tareas/                     # se crea con las HU de tareas
-      colaboracion/               # se crea con comentarios y archivos
-      notificaciones/             # se crea con avisos
-      reportes/                   # se crea con tablero y resúmenes
-  migrations/                     # cambios de esquema versionados
-  tests/                          # reglas, integración API/BD y recorridos críticos
+      acceso/  proyectos/  tareas/  avisos/  colaboracion/  respaldos/
+        router.py  service.py  repository.py  [schemas.py  deps.py]
+  migrations/versions/   # 0001_esquema_inicial … 0021_historial_accesos
+  tests/                 # test_sprint1…6, test_servicios, test_regresion_permisos, e2e/
+  requirements.txt  requirements-lock.txt  requirements-e2e.txt
 frontend/
-  js/
-    core/                         # cliente HTTP, navegación y sesión
-    components/                   # avisos, formularios y elementos comunes
-    features/                     # vistas de acceso, proyectos, tareas y tablero
-docs/
-  Arquitectura_Gestion_Proyectos.md
-  diagramas/
+  index.html
+  css/                   # tokens, base, layout, componentes, vistas
+  js/                    # tema, api, ui, componentes, atajos, colaboracion, tareas, avisos,
+                         # supervision, respaldos, administracion, app
+docs/                    # Arquitectura, Despliegue, Respaldo y restauración, diagramas/
+.github/workflows/ci.yml # pruebas + E2E
 ```
 
-No es necesario crear carpetas vacías para funciones futuras. Cada módulo empieza pequeño. Las rutas traducen errores a HTTP; los servicios deciden las reglas y el inicio/fin de transacción; los repositorios no hacen commits independientes. Un módulo no debe modificar tablas de otro saltándose su servicio. Reportes puede tener consultas conjuntas de lectura, siempre filtradas por acceso vigente. Las dependencias entre módulos deben evitar ciclos.
+## 5. Datos
 
-Como opción de implementación, SQLAlchemy puede unificar persistencia y transacciones y Alembic registrar cambios de esquema. No vuelven portátil cualquier SQL automáticamente: hay que revisar tipos, fechas, autoincrementos y `ON CONFLICT`, y ejecutar pruebas contra PostgreSQL si ese será el motor de producción. Referencias: [transacciones de SQLAlchemy](https://docs.sqlalchemy.org/en/20/orm/session_transaction.html) y [migraciones de Alembic](https://alembic.sqlalchemy.org/en/latest/).
+| Grupo | Tablas |
+|---|---|
+| Acceso | `funciones`, `usuarios` (activo, desactivación, contraseña temporal), `sesiones` (última actividad), `eventos_cuenta` |
+| Proyectos | `proyectos` (estado planificado → en curso → cerrado, datos del cierre), `participantes` (alta y retiro lógico), `historial_proyectos` |
+| Tareas | `tareas` (estado, responsable, prioridad, fecha límite), `historial_tareas`, `avances`, `bloqueos` (motivo, resolución) |
+| Colaboración | `comentarios` (marca de editado y retiro), `ediciones_comentario`, `archivos` (metadatos y nombre interno, retiro) |
+| Avisos | `avisos` (tipo, destinatario, evento de origen, leído) |
+| Operación | `claves_idempotencia`, `respaldos`, `alembic_version` |
 
-## 6. Integridad y seguridad de las operaciones
+- **Nada se borra físicamente:** las cuentas se desactivan, los participantes se retiran, los comentarios y archivos se retiran dejando constancia, y el historial solo se agrega.
+- **El esquema cambia solo con migraciones.** `init_db()` aplica las pendientes al arrancar (`alembic upgrade head`), así que actualizar una instalación no pierde datos.
+- **Fechas:** las fechas límite son días de calendario. "Vencida" y "por vencer" se calculan con el día de `America/Guatemala` (`ZONA_HORARIA`), no con el del servidor. Los instantes (historial, avisos) se guardan en UTC.
 
-Una operación debe confirmar todos los cambios relacionados o ninguno. Por ejemplo, al asignar una tarea: comprobar cuenta activa y acceso al proyecto, validar el nuevo responsable, cambiar la asignación, añadir historial y crear el aviso interno dentro de la misma transacción. Si el aviso es solo una fila local, no requiere una cola. Correo u otros efectos externos futuros pueden usar una bandeja transaccional y un proceso con reintentos; no deben bloquear la petición ni perderse después del commit.
+## 6. Mecanismos transversales
+
+| Mecanismo | Implementación | HU |
+|---|---|---|
+| **Sesión** | Token aleatorio de 32 bytes. Expira tras 8 h sin actividad (`SESION_INACTIVIDAD_MIN`). El logout la elimina en el servidor. Desactivar la cuenta o restablecer el acceso invalida sus sesiones abiertas. | HU-01-003/004, 009, 011 |
+| **Contraseñas** | PBKDF2-SHA256 con sal y comparación en tiempo constante. No se recortan espacios. | HU-01-001 |
+| **Freno de intentos** | Tras 5 fallos con el mismo usuario, cada intento espera 2 s, 4 s, 8 s… hasta 5 min. El mensaje es genérico y no revela si la cuenta existe. | HU-01-003 |
+| **Autorización** | Se deniega por defecto. La función y la participación se leen de la BD **en cada petición**, así que un cambio aplica aunque la sesión esté abierta. Un recurso de otro proyecto responde 403 sin revelar si existe. | HU-01-007, 008 |
+| **Transacciones** | Solo el servicio abre la transacción. La operación, su historial y su aviso se confirman juntos o no se confirma nada. | HU-08-001 |
+| **Operación única** | Las creaciones mandan `Idempotency-Key`. La clave se guarda en la misma transacción, así que un reintento devuelve lo ya creado sin duplicarlo; la misma clave usada para otra acción da 409. | HU-08-002 |
+| **Sin sobrescritura** | El formulario manda lo que leyó y el repositorio actualiza campo por campo con `UPDATE … WHERE campo IS :leido`. Si otra persona cambió ese mismo dato: 409 con el valor vigente y lo escrito se conserva. Los cambios en campos distintos no chocan. | HU-08-003 |
+| **Historial** | Tareas: responsable, fecha, prioridad, estado, avances y bloqueos. Proyectos: estado, responsable, fechas, nombre, objetivo y cierre. Accesos: altas, funciones, desactivaciones, restablecimientos y participación. Siempre con actor, fecha, valor anterior y nuevo. | HU-04-006, 02-003, 02-006, 01-010 |
+| **Avisos** | Se crean en la transacción del evento y se ligan a su evento del historial, así que un reintento no los duplica. Nadie se avisa a sí mismo. El vencimiento cercano se avisa una vez por tarea y fecha, aunque el proceso corra muchas veces. | EP-06 |
+| **Archivos** | Máximo 10 MB y solo extensiones permitidas. Se escribe primero un `.parcial` y luego se renombra, con nombre interno aleatorio. La descarga comprueba el acceso vigente. | HU-05-002 |
+| **Respaldo** | Copia consistente de SQLite más los adjuntos y un manifiesto con conteos y huellas. Se escribe como `.parcial`, se verifica y se publica. Se conservan los 14 últimos y cada ejecución queda registrada. | HU-08-004 |
+| **Restauración** | Verifica el respaldo antes de copiar, no pisa una BD sin `--forzar`, migra, mide el tiempo y compara contra el origen. | HU-08-005 |
+| **Seguridad web** | CSP estricta, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY` y `Cache-Control: no-cache` en HTML/JS/CSS. | TEC-02 |
+
+### Ejemplo: replanificar y reasignar una tarea
 
 ```mermaid
 sequenceDiagram
-    actor Persona
-    participant UI as Interfaz
-    participant API as API de tareas
-    participant Servicio as Caso de uso
-    participant BD as Base de datos
-    Persona->>UI: Confirma asignación
-    UI->>API: Responsable, versión y clave de idempotencia
-    API->>Servicio: Identidad autenticada y solicitud validada
-    Servicio->>BD: Inicia transacción y valida acceso vigente
-    Servicio->>BD: Comprueba idempotencia y actualiza si versión coincide
-    alt Solicitud nueva y versión vigente
-        Servicio->>BD: Guarda historial, aviso y resultado idempotente
-        Servicio->>BD: Confirma transacción
-        Servicio-->>API: Asignación confirmada
-        API-->>UI: Éxito con versión nueva
-    else Reintento de la misma solicitud ya confirmada
-        Servicio-->>API: Resultado previo sin repetir efectos
-        API-->>UI: Mismo resultado
-    else Sin permiso o conflicto de versión
-        Servicio->>BD: Revierte cambios
-        Servicio-->>API: Error sin modificar la asignación
-        API-->>UI: 403 o 409 y mensaje comprensible
+    actor R as Responsable
+    participant UI as SPA (tareas.js)
+    participant API as Router tareas
+    participant S as Servicio tareas
+    participant BD as SQLite
+    R->>UI: Cambia responsable y fecha y confirma
+    UI->>API: PUT /api/tareas/{id}/plan<br/>{valores nuevos + leídos} · Bearer
+    API->>API: usuario_actual → tarea_autorizada (participa)
+    API->>S: replanificar(tarea, actor, cambios)
+    S->>S: ¿es responsable del proyecto? ¿proyecto abierto?<br/>¿nuevo responsable activo y participante?
+    S->>BD: BEGIN
+    S->>BD: UPDATE tareas SET … WHERE campo IS :leido (por campo)
+    alt Nadie cambió esos datos
+        S->>BD: INSERT historial_tareas (anterior, nuevo, actor, fecha)
+        S->>BD: INSERT avisos (asignación al nuevo, reasignación al anterior)
+        S->>BD: COMMIT
+        S-->>UI: 200 con la tarea actualizada
+        UI-->>R: "Guardado"
+    else Otro lo cambió mientras tanto
+        S->>BD: ROLLBACK
+        S-->>UI: 409 + valor vigente
+        UI-->>R: Avisa el conflicto y conserva lo escrito
     end
 ```
 
-El flujo es futuro; no describe los endpoints actuales. La comprobación de permisos y la mutación deben tener una estrategia de concurrencia coherente para que una revocación simultánea no deje abierta una ventana de escritura.
+## 7. Despliegue
 
-Para HU-08-002, guardar una clave de idempotencia acotada a usuario y operación, huella del contenido y respuesta. Una restricción única resuelve peticiones simultáneas; misma clave con contenido diferente devuelve conflicto. La interfaz conserva la clave durante el reintento y usa una nueva para otra intención. Deshabilitar un botón por sí solo no evita duplicados.
+```mermaid
+flowchart LR
+    usuarios["Navegadores<br/>de la organización"] -->|"HTTPS 443"| proxy["Proxy HTTPS"]
+    subgraph srv["Servidor del cliente (Windows o Linux)"]
+        proxy -->|"http 127.0.0.1:8000"| uv["Servicio Uvicorn<br/>app.main:app · 1 proceso"]
+        uv --> d1[("D:\\…\\datos<br/>gestion.db + archivos")]
+        uv --> d2[("E:\\…\\Respaldos")]
+        tarea["Programador de tareas / cron<br/>opcional"] -.-> uv
+    end
+    monitoreo["Monitoreo"] -->|"GET /api/salud"| proxy
+```
 
-Para HU-08-003, añadir `version` y actualizar con condición sobre la versión leída. Si no se actualiza ninguna fila, informar 409 y ofrecer recargar sin perder silenciosamente lo escrito. Es distinto de la idempotencia: resuelve cambios concurrentes, no reenvíos.
+- **Un solo proceso**, porque SQLite y el freno de intentos (en memoria) lo asumen.
+- **Configuración por variables de entorno:** `DATABASE_URL`, `ARCHIVOS_DIR`, `RESPALDOS_DIR`, `ADMIN_PASSWORD_INICIAL`, `ZONA_HORARIA`, `DIAS_POR_VENCER`, `SESION_INACTIVIDAD_MIN`, `AVISOS_CADA_MIN`, `RESPALDO_CADA_HORAS`, `RESPALDOS_CONSERVAR` y `ARCHIVO_MAX_MB`.
+- **Dependencias exactas** en `requirements-lock.txt`.
+- **Actualizar:** respaldo, nueva versión y arranque; las migraciones se aplican solas. Hay vuelta atrás documentada.
+- **`/api/salud`** responde el estado, la versión y el esquema, o 503 si no hay BD.
+- Procedimiento completo en [Despliegue](Despliegue.md) y [Respaldo y restauración](Respaldo_y_Restauracion.md).
 
-La participación activa continúa siendo la fuente de acceso al proyecto. Rol global, participación y acción permitida se evalúan juntos; archivos, avisos y reportes usan el mismo alcance. Debe aclararse qué ocurre si un responsable pierde su función global, si un supervisor puede actualizar una tarea propia y quién sustituye a un responsable desactivado. No se cambiarán estas reglas por conveniencia de la interfaz.
+## 8. Calidad y pipeline
 
-Auditoría registra actor, fecha UTC, acción, recurso y valores relevantes, sin contraseñas ni tokens. Una fila de participante activo y un evento de acceso cumplen funciones distintas. Fechas límite que representan un día se almacenan como fecha; instantes como UTC, con zona de la organización para presentar y calcular vencimientos.
+| Nivel | Qué cubre |
+|---|---|
+| `test_servicios.py` | Reglas de negocio llamando a los servicios directamente, sin HTTP. |
+| `test_sprint1.py` … `test_sprint6.py` | Criterios de aceptación de cada historia contra la API, cada prueba con su BD temporal. |
+| `test_regresion_permisos.py` | Recorre **todas** las rutas: sin sesión, con cuenta desactivada o con contraseña temporal pendiente no responden; las de administración son solo del Admin; quien no participa recibe 403 sin que cambie nada. |
+| `tests/e2e` (Playwright) | Recorrido completo en un navegador real con varias personas, permisos en la interfaz y uso desde el teléfono. |
 
-Los archivos se incorporan con metadatos en BD y contenido privado: tamaño y tipos permitidos, identificador interno, descarga autenticada, límites de cuota y estrategia de limpieza ante cargas fallidas. Nunca se sirven desde la carpeta pública del frontend. El proceso de revisión de archivos dependerá de los tipos y riesgos acordados.
+GitHub Actions (`.github/workflows/ci.yml`) corre en cada push y pull request dos jobs encadenados: `test` (pytest sin E2E) y, si pasa, `e2e` (instala Chromium y corre Playwright).
 
-## 7. Operación y optimización que sí aportan valor
+## 9. Decisiones de arquitectura
 
-Antes del piloto: configuración por entorno; primer administrador aprovisionado de forma segura; HTTPS; caducidad y revocación de sesiones; límites de intentos de acceso; manejo uniforme de errores; datos persistentes fuera del código y de carpetas sincronizadas; respaldos y restauración ensayada. OneDrive no sustituye un respaldo consistente de la base en uso.
+| Decisión | Motivo |
+|---|---|
+| Monolito modular en vez de microservicios | Un cliente, un equipo pequeño y operaciones que deben ser atómicas entre módulos (tarea + historial + aviso). Los módulos son límites de código, no servidores. |
+| SQLite en vez de PostgreSQL | Una organización con escritura moderada. Sin servidor de BD que instalar (no todo el equipo usa Docker). Se migra a PostgreSQL solo si el piloto muestra mucha escritura simultánea. |
+| SQLAlchemy Core + Alembic | SQL explícito y parametrizado, transacciones controladas por el servicio y esquema versionado. |
+| Frontend sin framework ni build | Menos dependencias y despliegue trivial (el backend sirve los estáticos), con CSP estricta. |
+| Procesos programados dentro del proceso | Nada extra que instalar. Siguen disponibles como comando para el Programador de tareas y son seguros de repetir. |
+| Accesos por participación, no solo por función | Cada persona ve únicamente sus proyectos, incluido el Admin. |
 
-El formato de errores debe permitir distinguir validación, falta de acceso y conflicto sin exponer SQL ni trazas al usuario. Mantener inicialmente las rutas `/api` y sus respuestas durante la reorganización reduce el riesgo para el frontend y las pruebas.
+## 10. Limitaciones conocidas y evolución
 
-La integración continua debe instalar versiones reproducibles, comprobar sintaxis y ejecutar pruebas de reglas e integración. Separar dependencias de ejecución y desarrollo; fijar el conjunto resuelto para releases. La canalización existe en la ubicación correcta, pero no se comprobó una ejecución remota ni se modificaron versiones de paquetes durante esta revisión.
-
-El despliegue debe usar un artefacto versionado y un paso explícito de migración. Definir cómo recuperar código y datos si falla una actualización; un respaldo previo no reemplaza un procedimiento de recuperación probado. Los registros operativos deben incluir identificador de petición y errores sin secretos; salud del proceso, disponibilidad de BD y resultado del último respaldo deben ser observables.
-
-Optimizar con mediciones: paginar listados, limitar resultados, añadir índices según consultas frecuentes y verificar sus planes. Candidatos a evaluar: participación por usuario/activo/proyecto, tareas por proyecto/estado y responsable/fecha, avisos por destinatario/leído. No duplicar índices ya cubiertos por claves. Reportes calculan sobre datos confirmados; no introducir caché antes de comprobar necesidad e invalidación correcta.
-
-Antes de prometer rendimiento, acordar usuarios simultáneos, volumen de proyectos/tareas, tamaño de adjuntos y recorridos de prueba; medir percentil 95 de respuesta con esos datos. Acordar también pérdida máxima de datos, tiempo de recuperación, retención, disponibilidad y responsable de soporte. No hay todavía resultados de carga ni compromisos de servicio validados.
-
-## 8. Orden de implementación
-
-| Momento | Trabajo propuesto | Evidencia para cerrarlo |
-| --- | --- | --- |
-| Entrega actual | Explicar esta arquitectura; demostrar dos HU; registrar CI y ejecución limpia | Recorrido login → crear proyecto → consulta autorizada y rechazo sin acceso; criterios documentados |
-| Antes de ampliar Sprint 2 | Extraer servicio/repositorio de proyectos conservando API; dividir vistas; introducir configuración y migración inicial | Mismas pruebas de API; regla de creación probada fuera de HTTP; actualización sin perder datos |
-| Sprint 2 | Tareas, asignación e idempotencia; historial desde el primer cambio | Un reenvío concurrente crea una sola tarea y conserva una sola intención de negocio |
-| Sprint 3 | Versionado, conflictos y consultas paginadas del tablero | Dos editores no se sobrescriben; cifras y permisos coinciden con el detalle |
-| Sprint 4 | Comentarios, adjuntos privados y avisos transaccionales | Descarga no autorizada rechazada; un cambio confirmado no pierde ni duplica su aviso |
-| Sprint 5 | Recordatorios programados y supervisión | Proceso repetido o ejecutado por dos instancias no duplica avisos |
-| Sprint 6 | Administración de cuentas, respaldo/restauración y release 1.0 | Instalación nueva exige cambiar la contraseña inicial; restauración ensayada en entorno separado y comparada con el origen; regresión de permisos sobre todas las rutas y E2E del recorrido completo ([Despliegue](Despliegue.md)) |
-| Antes de cualquier piloto real | Seguridad de acceso, motor de BD decidido, despliegue reproducible, respaldo/restauración y soporte | Instalación nueva segura, migración con datos, restauración en entorno separado y criterios operativos acordados |
-
-La condición del piloto se aplica aunque algunas funciones previstas para sprints posteriores se pospongan. Esto adelanta la base de recuperación de HU-08-004/005 y las decisiones de acceso necesarias, sin afirmar que esas historias ya estén terminadas. El Sprint 1 suma 31 puntos frente a la velocidad estimada de 25–30; agregar trabajo exige reestimar o retirar alcance, no mantener la misma promesa automáticamente.
-
-## 9. Decisiones pendientes y validación de esta revisión
-
-Confirmar con el cliente: instalación dedicada o plataforma compartida; volumen real y entorno de alojamiento; matriz de permisos; reglas de cierre y reasignación; tipos y cuotas de archivos; avisos indispensables; zona horaria; objetivos de recuperación y soporte. La propuesta de instalación dedicada permite avanzar, pero no debe convertirse en una promesa comercial sin validación.
-
-Se comprobó estructura, historial local, referencias, sintaxis Python/JavaScript y definición de CI. Se intentó ejecutar pytest: el Python disponible no tenía FastAPI, pytest ni httpx. Se intentó instalar las dependencias en una carpeta temporal aislada, pero la resolución de `pypi.org` falló. Por ello **no se certifica el resultado de las ocho pruebas ni de una ejecución en navegador**. No se modificó lógica de aplicación ni se ejecutaron cambios en una base con datos del usuario.
-
-Los cinco diagramas editables se encuentran en `docs/diagramas`: `arquitectura-actual.mmd`, `contexto.mmd`, `arquitectura-propuesta.mmd`, `componentes-modulo.mmd` y `asignacion-tarea.mmd`. La lectura de código sustenta los hallazgos; las fuentes oficiales enlazadas sustentan las recomendaciones generales. La selección del monolito modular, sus límites y su secuencia son juicio de diseño para este proyecto.
+- El token de sesión vive en `localStorage`. Mejora prevista: cookie HttpOnly/Secure/SameSite con protección CSRF y hash del token en la BD.
+- El hash de contraseñas no guarda su algoritmo ni su costo. Mejora prevista: política versionada con rehash al iniciar sesión.
+- Solo admite un proceso: con varios, el freno de intentos y SQLite necesitarían un almacén compartido y PostgreSQL.
+- Los listados no están paginados y los avisos no salen por correo.

@@ -1,0 +1,14 @@
+flowchart LR
+    admin["Administrador<br/>cuentas, funciones, accesos y respaldos"]
+    resp["Responsable de proyecto<br/>planifica, asigna, resuelve bloqueos y cierra"]
+    integ["Integrante<br/>actualiza sus tareas, avances y bloqueos"]
+    sup["Supervisor<br/>consulta estado general y carga"]
+    sistema["Sistema de gestión de proyectos<br/>v1.0 · single-tenant"]
+    disco[("Almacenamiento de respaldos<br/>otro disco del servidor")]
+    ti["TI del cliente<br/>instala, actualiza y monitorea"]
+    admin --> sistema
+    resp --> sistema
+    integ --> sistema
+    sup --> sistema
+    sistema -->|"copia .zip verificada"| disco
+    ti -->|"servicio, variables, /api/salud"| sistema

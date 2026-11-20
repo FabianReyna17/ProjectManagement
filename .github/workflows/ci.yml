@@ -31,3 +31,14 @@ jobs:
       - run: pip install -r requirements-e2e.txt
       - run: python -m playwright install --with-deps chromium
       - run: python -m pytest tests/e2e -v
+
+  # Despliegue continuo: cada push a main que pasa las pruebas se publica en Azure.
+  # Corre en un runner self-hosted instalado en la VM de Azure (no se abre SSH ni se guardan credenciales).
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, e2e]
+    runs-on: [self-hosted, azure]
+    concurrency: produccion
+    steps:
+      - name: Publicar en Azure (git pull, dependencias, reinicio y verificación de /api/salud)
+        run: sudo /opt/gestion/actualizar.sh
